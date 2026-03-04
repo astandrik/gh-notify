@@ -100,7 +100,11 @@ export function buildHtmlUrl(notification) {
 
   const base = `https://github.com/${repoFullName}`;
 
-  if (!subjectUrl || !repoFullName) return base;
+  if (!repoFullName) return base;
+
+  if (subjectType === "Discussion") return `${base}/discussions`;
+
+  if (!subjectUrl) return base;
 
   const pullMatch = subjectUrl.match(/\/pulls\/(\d+)$/);
   if (pullMatch) return `${base}/pull/${pullMatch[1]}`;
@@ -113,8 +117,6 @@ export function buildHtmlUrl(notification) {
 
   const releaseMatch = subjectUrl.match(/\/releases\/(\d+)$/);
   if (releaseMatch) return `${base}/releases`;
-
-  if (subjectType === "Discussion") return `${base}/discussions`;
 
   return base;
 }
