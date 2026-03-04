@@ -72,9 +72,21 @@ async function main(): Promise<void> {
     };
 
     pollPromise = run()
-      .catch((err: unknown) => {
+      .catch(async (err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
         console.error("[poll] Error:", message);
+
+        if (state.chatId) {
+          try {
+            await bot.api.sendMessage(
+              state.chatId,
+              `⚠️ <b>gh-notify error</b>\n\n<code>${message}</code>\n\nPolling will retry on next cycle.`,
+              { parse_mode: "HTML" },
+            );
+          } catch {
+            // Can't send to Telegram — nothing more we can do
+          }
+        }
       })
       .then(() => { pollPromise = null; });
 
@@ -119,10 +131,10 @@ async function main(): Promise<void> {
 
   await bot.start({
     onStart: () => console.log("[bot] Telegram bot is running."),
-  }).catch((err: unknown) => {
+  }).catch(async (err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[bot] Failed to start Telegram bot:", message);
-    shutdown("BOT_ERROR");
+    await shutdown("BOT_ERROR");
   });
 }
 

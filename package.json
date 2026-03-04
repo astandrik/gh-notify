@@ -29,11 +29,11 @@
     "@octokit/request-error": "^7.1.0",
     "@octokit/rest": "^22.0.1",
     "grammy": "^1.41.1",
-    "lowdb": "^7.0.1"
+    "lowdb": "^7.0.1",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

@@ -15,6 +15,7 @@ export async function fetchNotifications(
   try {
     const response = await octokit.rest.activity.listNotificationsForAuthenticatedUser({
       participating: true,
+      per_page: 100,
       headers: lastModified ? { "if-modified-since": lastModified } : {},
     });
 
