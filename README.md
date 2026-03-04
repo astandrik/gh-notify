@@ -2,7 +2,7 @@
 
 GitHub notifications → Telegram bot.
 
-Polls the GitHub Notifications API and forwards mentions, review requests, comments, and assignments to your Telegram chat.
+Поллит GitHub Notifications API и пересылает упоминания, запросы на ревью, комменты и назначения прямо в Telegram.
 
 ```
 GitHub Notifications API
@@ -19,113 +19,406 @@ GitHub Notifications API
    Your Telegram chat
 ```
 
+---
+
 ## TL;DR
 
 ```bash
 git clone https://github.com/astandrik/gh-notify.git && cd gh-notify
 cp .env.example .env
-# fill TG_BOT_TOKEN and GH_TOKEN in .env
+# заполни TG_BOT_TOKEN и GH_TOKEN в .env
 docker compose up -d
-# send /start to your bot in Telegram — done!
+# отправь /start боту в Telegram — готово!
 ```
 
-## Quick Start
+---
 
-### 1. Create a Telegram bot
+## Содержание
 
-1. Open [@BotFather](https://t.me/BotFather) in Telegram
-2. Send `/newbot`, follow the prompts
-3. Copy the bot token
+- [Требования](#требования)
+- [Получение токенов](#получение-токенов)
+- [Установка и запуск](#установка-и-запуск)
+- [Команды бота](#команды-бота)
+- [Поддерживаемые события](#поддерживаемые-события)
+- [Переменные окружения](#переменные-окружения)
+- [Структура проекта](#структура-проекта)
+- [Как это работает](#как-это-работает)
+- [Тесты](#тесты)
+- [Обновление](#обновление)
+- [Troubleshooting](#troubleshooting)
 
-### 2. Create a GitHub Personal Access Token
+---
 
-1. Go to [GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens](https://github.com/settings/personal-access-tokens/new)
-2. Set permissions:
-   - **Notifications**: Read
-   - **Pull requests**: Read
-   - **Issues**: Read
-3. Copy the token
+## Требования
 
-### 3. Configure
+- **Node.js** >= 18 (рекомендуется 22 LTS)
+- **npm** >= 8
+- **Docker** + **Docker Compose** (опционально, для контейнерного запуска)
+- Telegram-аккаунт
+- GitHub-аккаунт
+
+---
+
+## Получение токенов
+
+### Telegram Bot Token
+
+1. Открой [@BotFather](https://t.me/BotFather) в Telegram
+2. Отправь `/newbot`
+3. Следуй инструкциям — задай имя и username бота
+4. BotFather вернёт токен вида `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`
+5. Сохрани его — это `TG_BOT_TOKEN`
+
+### GitHub Personal Access Token (PAT)
+
+1. Перейди в [GitHub Settings → Developer settings → Fine-grained tokens](https://github.com/settings/personal-access-tokens/new)
+2. Нажми **Generate new token**
+3. Задай имя (например, `gh-notify`)
+4. Выбери **Repository access** → All repositories (или конкретные)
+5. В разделе **Permissions** включи:
+   - **Notifications** → Read
+   - **Pull requests** → Read
+   - **Issues** → Read
+6. Нажми **Generate token** и скопируй — это `GH_TOKEN`
+
+> ⚠️ Токен показывается только один раз. Если потерял — создай новый.
+
+### Chat ID (опционально)
+
+Chat ID определяется автоматически при отправке `/start` боту. Но если хочешь задать вручную:
+
+1. Напиши своему боту любое сообщение
+2. Открой `https://api.telegram.org/bot<TG_BOT_TOKEN>/getUpdates`
+3. Найди `"chat": { "id": 123456789 }` — это твой `CHAT_ID`
+
+---
+
+## Установка и запуск
+
+### Вариант 1: Docker (рекомендуется)
+
+**Клонирование:**
+
+```bash
+git clone https://github.com/astandrik/gh-notify.git
+cd gh-notify
+```
+
+**Конфигурация:**
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Отредактируй `.env` — заполни как минимум два поля:
 
+```env
+TG_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+GH_TOKEN=github_pat_xxxxxxxxxxxxxxxx
 ```
-TG_BOT_TOKEN=your_telegram_bot_token
-GH_TOKEN=your_github_pat
-```
 
-### 4. Run
-
-**With Docker (recommended):**
+**Сборка и запуск:**
 
 ```bash
 docker compose up -d
 ```
 
-**Without Docker:**
+**Проверка логов:**
+
+```bash
+docker compose logs -f
+```
+
+Ожидаемый вывод:
+
+```
+bot-1  | [bot] Starting gh-notify...
+bot-1  | [bot] Poll interval: 60000ms
+bot-1  | [bot] GitHub token: configured
+bot-1  | [bot] Chat ID: not set (use /start)
+bot-1  | [bot] Telegram bot is running.
+```
+
+**Остановка:**
+
+```bash
+docker compose down
+```
+
+**Пересборка после обновления кода:**
+
+```bash
+docker compose up -d --build
+```
+
+### Вариант 2: Без Docker (Node.js напрямую)
+
+**Клонирование:**
+
+```bash
+git clone https://github.com/astandrik/gh-notify.git
+cd gh-notify
+```
+
+**Установка зависимостей:**
 
 ```bash
 npm install
+```
+
+**Конфигурация:**
+
+```bash
+cp .env.example .env
+# отредактируй .env — заполни TG_BOT_TOKEN и GH_TOKEN
+```
+
+**Запуск:**
+
+```bash
 npm start
 ```
 
-### 5. Initialize
+Или напрямую:
 
-Send `/start` to your bot in Telegram. The bot will auto-detect your chat ID and start sending notifications.
+```bash
+node src/index.js
+```
 
-## Bot Commands
+**Запуск в фоне (через systemd / pm2 / nohup):**
 
-| Command | Description |
-|---------|-------------|
-| `/start` | Initialize bot, detect chat ID |
-| `/auth <token>` | Set GitHub token (message auto-deleted for security) |
-| `/subscribe` | Toggle event types with inline buttons |
-| `/unsubscribe` | Disable all notifications |
-| `/status` | Show current configuration |
-| `/help` | List available commands |
+```bash
+# pm2 (рекомендуется для production)
+npm install -g pm2
+pm2 start src/index.js --name gh-notify
+pm2 save
+pm2 startup
 
-## Supported Events
+# или через nohup
+nohup npm start > gh-notify.log 2>&1 &
+```
 
-| Event | Emoji | Description |
-|-------|-------|-------------|
-| `mention` | 💬 | Someone mentioned you |
-| `review_requested` | 👀 | Review requested on a PR |
-| `comment` | 🗨️ | Comment on your PR/issue |
-| `assign` | 📌 | You were assigned |
+### Вариант 3: Cron (минимальный)
 
-## Notification Example
+Если не нужен постоянно работающий процесс:
+
+```bash
+# Добавить в crontab -e
+* * * * * cd /path/to/gh-notify && node src/index.js
+```
+
+> ⚠️ Этот вариант не поддерживает команды бота — только отправку уведомлений.
+
+---
+
+## Первый запуск
+
+1. Запусти бота одним из способов выше
+2. Открой своего бота в Telegram
+3. Отправь `/start`
+4. Бот ответит приветствием и автоматически сохранит твой chat ID
+5. Если GitHub токен задан в `.env` — уведомления начнут приходить сразу
+6. Если нет — отправь `/auth <твой_github_токен>` (сообщение будет автоматически удалено)
+
+---
+
+## Команды бота
+
+| Команда | Описание |
+|---------|----------|
+| `/start` | Инициализация, автоопределение chat ID |
+| `/auth <token>` | Установить GitHub PAT (сообщение удаляется автоматически 🔒) |
+| `/subscribe` | Управление подписками — inline-кнопки для каждого типа события |
+| `/unsubscribe` | Отключить все уведомления |
+| `/status` | Текущая конфигурация: токен, подписки, статус |
+| `/help` | Справка по командам |
+
+---
+
+## Поддерживаемые события
+
+По умолчанию бот подписан на 4 основных типа событий. Управлять подписками можно через `/subscribe`.
+
+| Событие | Emoji | Описание | По умолчанию |
+|---------|-------|----------|:------------:|
+| `mention` | 💬 | Тебя упомянули (@username) | ✅ |
+| `review_requested` | 👀 | Запрос на ревью PR | ✅ |
+| `comment` | 🗨️ | Коммент к твоему PR/issue | ✅ |
+| `assign` | 📌 | Тебя назначили на issue/PR | ✅ |
+| `team_mention` | 👥 | Упоминание твоей команды | ❌ |
+| `ci_activity` | ⚙️ | CI/CD активность | ❌ |
+| `state_change` | 🔄 | Изменение статуса | ❌ |
+| `subscribed` | 🔔 | Подписан на тред | ❌ |
+| `author` | ✍️ | Ты автор | ❌ |
+| `approval_requested` | ✅ | Запрос на approval | ❌ |
+
+---
+
+## Пример уведомления
+
+В Telegram придёт сообщение:
 
 ```
 👀 Review requested
 
-📦 owner/repo
+📦 astandrik/ydb-qdrant
 PullRequest: Fix vector search
-🔗 Open on GitHub
+🔗 Open on GitHub        ← кликабельная ссылка
 ```
 
-## Environment Variables
+---
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `TG_BOT_TOKEN` | ✅ | — | Telegram bot token from @BotFather |
-| `GH_TOKEN` | ❌ | — | GitHub PAT (can also set via `/auth`) |
-| `CHAT_ID` | ❌ | — | Auto-detected on `/start` |
-| `POLL_INTERVAL` | ❌ | `60000` | Polling interval in ms |
+## Переменные окружения
 
-## How It Works
+| Переменная | Обязательная | По умолчанию | Описание |
+|------------|:------------:|:------------:|----------|
+| `TG_BOT_TOKEN` | ✅ | — | Токен Telegram бота от @BotFather |
+| `GH_TOKEN` | ❌ | — | GitHub PAT (можно задать через `/auth` в боте) |
+| `CHAT_ID` | ❌ | — | Автоопределяется при `/start` |
+| `POLL_INTERVAL` | ❌ | `60000` | Интервал опроса GitHub API в миллисекундах |
 
-1. Bot polls `GET /notifications?participating=true` every 60 seconds
-2. Uses `If-Modified-Since` header for efficient polling (304 = no new data)
-3. Filters notifications by subscribed event types
-4. Formats and sends messages to Telegram with clickable links
-5. Marks notifications as read on GitHub
-6. Persists state (seen IDs, config) to `data/state.json`
+---
 
-## Rate Limits
+## Структура проекта
 
-GitHub API allows 5,000 requests/hour. Polling once per minute = 60 requests/hour — well within limits.
+```
+gh-notify/
+├── src/
+│   ├── index.js           # Точка входа: запуск бота + polling loop
+│   ├── bot.js             # Telegram бот (grammy): команды и inline-кнопки
+│   ├── github.js          # GitHub API клиент: polling, mark-as-read, URL
+│   ├── formatter.js       # Форматирование уведомлений → Telegram HTML
+│   ├── store.js           # Персистентное хранилище (JSON файл)
+│   ├── config.js          # Загрузка переменных окружения
+│   ├── formatter.test.js  # Тесты форматирования (31 тест)
+│   ├── github.test.js     # Тесты GitHub API (26 тестов)
+│   └── store.test.js      # Тесты хранилища (22 теста)
+├── data/                  # Рантайм-данные (state.json) — в .gitignore
+├── package.json
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example           # Шаблон конфигурации
+├── .dockerignore
+└── .gitignore
+```
+
+---
+
+## Как это работает
+
+1. **Polling**: бот делает `GET /notifications?participating=true` каждые 60 секунд
+2. **Эффективность**: использует заголовок `If-Modified-Since` — GitHub отвечает `304 Not Modified` если нет новых уведомлений (не тратит rate limit)
+3. **Фильтрация**: пропускает только события из списка подписок пользователя
+4. **Дедупликация**: хранит ID последних 500 уведомлений чтобы не слать повторно
+5. **Форматирование**: каждое уведомление форматируется в HTML с emoji, названием репо, заголовком и кликабельной ссылкой
+6. **Mark-as-read**: после отправки в Telegram уведомление помечается прочитанным на GitHub
+7. **Персистентность**: состояние сохраняется в `data/state.json` — переживает перезапуск
+
+### Rate limits
+
+GitHub API: **5,000 запросов/час**.
+Бот делает **1 запрос/минуту** = **60 запросов/час** — это 1.2% от лимита.
+
+---
+
+## Тесты
+
+Запуск всех тестов:
+
+```bash
+npm test
+```
+
+Или напрямую:
+
+```bash
+node --test src/**/*.test.js
+```
+
+Запуск тестов конкретного модуля:
+
+```bash
+node --test src/github.test.js
+node --test src/formatter.test.js
+node --test src/store.test.js
+```
+
+Текущее покрытие: **79 тестов** — `github.js`, `formatter.js`, `store.js`.
+
+---
+
+## Обновление
+
+### Docker
+
+```bash
+cd gh-notify
+git pull
+docker compose up -d --build
+```
+
+### Node.js
+
+```bash
+cd gh-notify
+git pull
+npm install
+# перезапустить процесс (pm2 restart gh-notify / systemctl restart gh-notify / etc)
+```
+
+Данные (state.json) сохраняются между обновлениями — конфигурация бота и подписки не теряются.
+
+---
+
+## Troubleshooting
+
+### Бот не отвечает на команды
+
+- Убедись что `TG_BOT_TOKEN` правильный
+- Проверь логи: `docker compose logs -f` или вывод в терминал
+- Убедись что ты пишешь именно своему боту (не чужому)
+
+### Уведомления не приходят
+
+- Проверь `/status` — GitHub должен быть `✅ connected`, notifications `🔔 enabled`
+- Убедись что `GH_TOKEN` имеет права на notifications
+- Проверь что есть непрочитанные уведомления на GitHub
+- Бот поллит только `participating=true` — это уведомления где ты непосредственно участвуешь
+
+### `Error: TG_BOT_TOKEN is required`
+
+Не задан токен Telegram бота. Создай `.env` файл:
+
+```bash
+cp .env.example .env
+# заполни TG_BOT_TOKEN
+```
+
+### `GitHub API 401: authentication failed`
+
+Невалидный GitHub токен. Создай новый:
+[GitHub Settings → Fine-grained tokens](https://github.com/settings/personal-access-tokens/new)
+
+### Docker: `permission denied`
+
+```bash
+sudo docker compose up -d
+```
+
+Или добавь пользователя в группу docker:
+
+```bash
+sudo usermod -aG docker $USER
+# перелогинься
+```
+
+### Данные потерялись после перезапуска Docker
+
+Убедись что volume подключён в `docker-compose.yml`:
+
+```yaml
+volumes:
+  - bot-data:/app/data
+```
+
+При использовании `docker compose down -v` volumes удаляются. Используй `docker compose down` без `-v`.
