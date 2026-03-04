@@ -1,79 +1,80 @@
+import { Octokit } from "octokit";
+import { RequestError } from "@octokit/request-error";
 import type { GitHubNotification, FetchResult, TokenValidation } from "./types.js";
 
-const API_BASE = "https://api.github.com";
-const USER_AGENT = "gh-notify-telegram-bot";
-
-function headers(token: string, extra: Record<string, string> = {}): Record<string, string> {
-  return {
-    Authorization: `Bearer ${token}`,
-    "User-Agent": USER_AGENT,
-    Accept: "application/vnd.github+json",
-    ...extra,
-  };
+function createClient(token: string): Octokit {
+  return new Octokit({ auth: token, userAgent: "gh-notify-telegram-bot" });
 }
 
 export async function fetchNotifications(
   token: string,
   lastModified: string | null = null,
 ): Promise<FetchResult> {
-  const extra: Record<string, string> = {};
-  if (lastModified) {
-    extra["If-Modified-Since"] = lastModified;
-  }
+  const octokit = createClient(token);
 
-  const res = await fetch(
-    `${API_BASE}/notifications?participating=true`,
-    { headers: headers(token, extra) },
-  );
+  try {
+    const response = await octokit.rest.activity.listNotificationsForAuthenticatedUser({
+      participating: true,
+      headers: lastModified ? { "if-modified-since": lastModified } : {},
+    });
 
-  if (res.status === 304) {
-    return { notifications: [], lastModified };
-  }
+    const notifications: GitHubNotification[] = response.data.map((n) => ({
+      id: n.id,
+      reason: n.reason,
+      repository: n.repository
+        ? { full_name: n.repository.full_name }
+        : undefined,
+      subject: n.subject
+        ? {
+            type: n.subject.type,
+            title: n.subject.title,
+            url: n.subject.url ?? "",
+          }
+        : undefined,
+    }));
 
-  if (res.status === 401) {
-    throw new Error("GitHub API 401: authentication failed. Check your token.");
-  }
+    const newLastModified =
+      response.headers["last-modified"] ?? lastModified;
 
-  if (res.status === 403) {
-    const remaining = res.headers.get("x-ratelimit-remaining");
-    if (remaining === "0") {
-      const reset = res.headers.get("x-ratelimit-reset");
-      const resetDate = reset ? new Date(Number(reset) * 1000).toISOString() : "unknown";
-      console.warn(`[github] Rate limited. Resets at ${resetDate}. Skipping cycle.`);
-      return { notifications: [], lastModified };
+    return { notifications, lastModified: newLastModified ?? null };
+  } catch (error) {
+    if (error instanceof RequestError) {
+      if (error.status === 304) {
+        return { notifications: [], lastModified };
+      }
+      if (error.status === 401) {
+        throw new Error("GitHub API 401: authentication failed. Check your token.");
+      }
+      if (error.status === 403) {
+        throw new Error("GitHub API 403: forbidden. Check your token permissions.");
+      }
+      throw new Error(`GitHub API ${error.status}: ${error.message}`);
     }
-    throw new Error("GitHub API 403: forbidden. Check your token permissions.");
+    throw error;
   }
-
-  if (!res.ok) {
-    throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
-  }
-
-  const notifications = (await res.json()) as GitHubNotification[];
-  const newLastModified = res.headers.get("last-modified") || lastModified;
-
-  return { notifications, lastModified: newLastModified };
 }
 
 export async function markAsRead(token: string, threadId: string): Promise<void> {
-  const res = await fetch(
-    `${API_BASE}/notifications/threads/${threadId}`,
-    { method: "PATCH", headers: headers(token) },
-  );
+  const octokit = createClient(token);
 
-  if (!res.ok && res.status !== 205) {
-    console.warn(`[github] Failed to mark thread ${threadId} as read: ${res.status}`);
+  try {
+    await octokit.rest.activity.markThreadAsRead({
+      thread_id: Number(threadId),
+    });
+  } catch (error) {
+    if (error instanceof RequestError) {
+      console.warn(`[github] Failed to mark thread ${threadId} as read: ${error.status}`);
+      return;
+    }
+    throw error;
   }
 }
 
 export async function validateToken(token: string): Promise<TokenValidation> {
   try {
-    const res = await fetch(`${API_BASE}/user`, { headers: headers(token) });
-    if (res.ok) {
-      const user = (await res.json()) as { login: string };
-      return { valid: true, login: user.login };
-    }
-    return { valid: false };
+    const octokit = createClient(token);
+    const { data } = await octokit.rest.users.getAuthenticated();
+    return { valid: true, login: data.login };
   } catch {
     return { valid: false };
   }

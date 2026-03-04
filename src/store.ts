@@ -1,8 +1,9 @@
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { JSONFilePreset } from "lowdb/node";
+import type { Low } from "lowdb";
 import type { AppState, EnvOverrides } from "./types.js";
 
-const STATE_PATH: string = resolve("data", "state.json");
+const STATE_PATH = "data/state.json";
 
 const DEFAULT_SUBSCRIPTIONS: string[] = [
   "mention",
@@ -22,34 +23,17 @@ function getDefault(): AppState {
   };
 }
 
-export async function load(envOverrides: EnvOverrides = {}): Promise<AppState> {
-  await mkdir(dirname(STATE_PATH), { recursive: true });
+let db: Low<AppState> | null = null;
 
-  let state: AppState;
-  try {
-    const raw = await readFile(STATE_PATH, "utf-8");
-    state = JSON.parse(raw) as AppState;
-  } catch (error: unknown) {
-    const isNotFound =
-      error !== null &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as NodeJS.ErrnoException).code === "ENOENT";
-
-    if (isNotFound || error instanceof SyntaxError) {
-      state = getDefault();
-    } else {
-      throw error;
-    }
+async function getDb(): Promise<Low<AppState>> {
+  if (!db) {
+    await mkdir("data", { recursive: true });
+    db = await JSONFilePreset<AppState>(STATE_PATH, getDefault());
   }
+  return db;
+}
 
-  if (envOverrides.ghToken && !state.githubToken) {
-    state.githubToken = envOverrides.ghToken;
-  }
-  if (envOverrides.chatId && !state.chatId) {
-    state.chatId = envOverrides.chatId;
-  }
-
+function repair(state: AppState): void {
   if (!Array.isArray(state.subscriptions)) {
     state.subscriptions = [...DEFAULT_SUBSCRIPTIONS];
   }
@@ -59,29 +43,34 @@ export async function load(envOverrides: EnvOverrides = {}): Promise<AppState> {
   if (!Array.isArray(state.seenIds)) {
     state.seenIds = [];
   }
-
-  return state;
 }
 
-let saveQueue: Promise<void> = Promise.resolve();
-
-async function writeState(serialized: string): Promise<void> {
-  await mkdir(dirname(STATE_PATH), { recursive: true });
-
-  const tmp = `${STATE_PATH}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await writeFile(tmp, serialized, "utf-8");
-  await rename(tmp, STATE_PATH);
+function applyOverrides(state: AppState, overrides: EnvOverrides): void {
+  if (overrides.ghToken && !state.githubToken) {
+    state.githubToken = overrides.ghToken;
+  }
+  if (overrides.chatId && !state.chatId) {
+    state.chatId = overrides.chatId;
+  }
 }
 
-export function save(state: AppState): Promise<void> {
-  const serialized = JSON.stringify(state, null, 2);
+export async function load(envOverrides: EnvOverrides = {}): Promise<AppState> {
+  const instance = await getDb();
+  await instance.read();
+  repair(instance.data);
+  applyOverrides(instance.data, envOverrides);
+  return instance.data;
+}
 
-  saveQueue = saveQueue.then(
-    () => writeState(serialized),
-    () => writeState(serialized),
-  );
+export async function save(state: AppState): Promise<void> {
+  const instance = await getDb();
+  instance.data = state;
+  await instance.write();
+}
 
-  return saveQueue;
+/** Reset the db singleton (for tests). */
+export function resetDb(): void {
+  db = null;
 }
 
 export { DEFAULT_SUBSCRIPTIONS };
