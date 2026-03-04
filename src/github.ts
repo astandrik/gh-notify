@@ -1,4 +1,4 @@
-import { Octokit } from "octokit";
+import { Octokit } from "@octokit/rest";
 import { RequestError } from "@octokit/request-error";
 import type { GitHubNotification, FetchResult, TokenValidation } from "./types.js";
 

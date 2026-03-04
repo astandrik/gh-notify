@@ -26,9 +26,10 @@
   },
   "homepage": "https://github.com/astandrik/gh-notify#readme",
   "dependencies": {
+    "@octokit/request-error": "^7.1.0",
+    "@octokit/rest": "^22.0.1",
     "grammy": "^1.41.1",
-    "lowdb": "^7.0.1",
-    "octokit": "^5.0.5"
+    "lowdb": "^7.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",

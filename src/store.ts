@@ -28,7 +28,18 @@ let db: Low<AppState> | null = null;
 async function getDb(): Promise<Low<AppState>> {
   if (!db) {
     await mkdir("data", { recursive: true });
-    db = await JSONFilePreset<AppState>(STATE_PATH, getDefault());
+    try {
+      db = await JSONFilePreset<AppState>(STATE_PATH, getDefault());
+    } catch (error: unknown) {
+      // lowdb throws SyntaxError on corrupted JSON — reset to defaults
+      if (error instanceof SyntaxError) {
+        const { writeFile } = await import("node:fs/promises");
+        await writeFile(STATE_PATH, JSON.stringify(getDefault(), null, 2), "utf-8");
+        db = await JSONFilePreset<AppState>(STATE_PATH, getDefault());
+      } else {
+        throw error;
+      }
+    }
   }
   return db;
 }

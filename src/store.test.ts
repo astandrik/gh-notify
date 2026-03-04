@@ -1,17 +1,19 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { rm, readFile, writeFile, mkdir } from "node:fs/promises";
-import { load, save, DEFAULT_SUBSCRIPTIONS } from "./store.js";
+import { load, save, resetDb, DEFAULT_SUBSCRIPTIONS } from "./store.js";
 
 const DATA_DIR = "data";
 const STATE_FILE = "data/state.json";
 
 describe("store", () => {
   beforeEach(async () => {
+    resetDb();
     await rm(DATA_DIR, { recursive: true, force: true });
   });
 
   afterEach(async () => {
+    resetDb();
     await rm(DATA_DIR, { recursive: true, force: true });
   });
 
