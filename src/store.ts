@@ -31,8 +31,8 @@ async function getDb(): Promise<Low<AppState>> {
     try {
       db = await JSONFilePreset<AppState>(STATE_PATH, getDefault());
     } catch (error: unknown) {
-      // lowdb throws SyntaxError on corrupted JSON — reset to defaults
       if (error instanceof SyntaxError) {
+        console.warn("[store] Corrupted state.json detected. Resetting to defaults.");
         const { writeFile } = await import("node:fs/promises");
         await writeFile(STATE_PATH, JSON.stringify(getDefault(), null, 2), "utf-8");
         db = await JSONFilePreset<AppState>(STATE_PATH, getDefault());

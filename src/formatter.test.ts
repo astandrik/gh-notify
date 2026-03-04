@@ -37,6 +37,10 @@ describe("escapeHtml", () => {
   it("handles strings with only special characters", () => {
     assert.equal(escapeHtml("<>&"), "&lt;&gt;&amp;");
   });
+
+  it("escapes double quotes", () => {
+    assert.equal(escapeHtml('a "b" c'), "a &quot;b&quot; c");
+  });
 });
 
 // ─── formatNotification — all known reason types ─────────────────────
@@ -218,6 +222,6 @@ describe("formatNotification — edge cases", () => {
     const { text } = formatNotification(n, "https://github.com/a/b/pull/1");
 
     assert.ok(text.includes("&amp;"));
-    assert.ok(text.includes('"encoding"'));
+    assert.ok(text.includes("&quot;encoding&quot;"));
   });
 });

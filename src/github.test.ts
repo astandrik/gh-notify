@@ -187,6 +187,31 @@ describe("fetchNotifications", () => {
       { message: /403.*forbidden/i },
     );
   });
+
+  it("gracefully skips on 403 rate limit", async () => {
+    stubFetch(async () =>
+      jsonResponse({ message: "rate limit exceeded" }, 403, {
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 3600),
+      }),
+    );
+
+    const result = await fetchNotifications("gh_token_123", "some-date");
+    assert.deepEqual(result.notifications, []);
+    assert.equal(result.lastModified, "some-date");
+  });
+
+  it("gracefully skips on 429 rate limit", async () => {
+    stubFetch(async () =>
+      jsonResponse({ message: "rate limit exceeded" }, 429, {
+        "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 3600),
+      }),
+    );
+
+    const result = await fetchNotifications("gh_token_123", "some-date");
+    assert.deepEqual(result.notifications, []);
+    assert.equal(result.lastModified, "some-date");
+  });
 });
 
 // ─── markAsRead ──────────────────────────────────────────────────────
