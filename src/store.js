@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 const STATE_PATH = resolve("data", "state.json");
@@ -58,7 +58,6 @@ export async function save(state) {
   const tmp = STATE_PATH + ".tmp";
   await writeFile(tmp, JSON.stringify(state, null, 2), "utf-8");
 
-  const { rename } = await import("node:fs/promises");
   await rename(tmp, STATE_PATH);
 }
 
