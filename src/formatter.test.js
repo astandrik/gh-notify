@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { formatNotification, escapeHtml } from "./formatter.js";
+import { formatNotification, escapeHtml, EMOJI_MAP, REASON_LABEL } from "./formatter.js";
+
+// ─── escapeHtml ──────────────────────────────────────────────────────
 
 describe("escapeHtml", () => {
   it("escapes ampersands", () => {
@@ -11,73 +13,197 @@ describe("escapeHtml", () => {
     assert.equal(escapeHtml("<script>"), "&lt;script&gt;");
   });
 
-  it("handles empty/null input", () => {
+  it("escapes mixed special characters", () => {
+    assert.equal(escapeHtml("a < b & c > d"), "a &lt; b &amp; c &gt; d");
+  });
+
+  it("handles empty string", () => {
     assert.equal(escapeHtml(""), "");
+  });
+
+  it("handles null", () => {
     assert.equal(escapeHtml(null), "");
+  });
+
+  it("handles undefined", () => {
     assert.equal(escapeHtml(undefined), "");
+  });
+
+  it("passes through plain text unchanged", () => {
+    assert.equal(escapeHtml("Hello world 123"), "Hello world 123");
+  });
+
+  it("handles strings with only special characters", () => {
+    assert.equal(escapeHtml("<>&"), "&lt;&gt;&amp;");
   });
 });
 
-describe("formatNotification", () => {
+// ─── formatNotification — all known reason types ─────────────────────
+
+describe("formatNotification — all reason types", () => {
   const baseNotification = {
     repository: { full_name: "owner/repo" },
-    subject: { type: "PullRequest", title: "Fix bug" },
+    subject: { type: "PullRequest", title: "Test PR" },
   };
+  const url = "https://github.com/owner/repo/pull/1";
 
-  it("formats mention with correct emoji", () => {
-    const n = { ...baseNotification, reason: "mention" };
-    const { text, parseMode } = formatNotification(n, "https://github.com/owner/repo/pull/1");
+  for (const [reason, emoji] of Object.entries(EMOJI_MAP)) {
+    it(`formats '${reason}' with emoji ${emoji}`, () => {
+      const n = { ...baseNotification, reason };
+      const { text, parseMode } = formatNotification(n, url);
 
-    assert.equal(parseMode, "HTML");
-    assert.ok(text.includes("💬"));
-    assert.ok(text.includes("Mention"));
-    assert.ok(text.includes("owner/repo"));
-    assert.ok(text.includes("Fix bug"));
-    assert.ok(text.includes("https://github.com/owner/repo/pull/1"));
-  });
+      assert.equal(parseMode, "HTML");
+      assert.ok(text.includes(emoji), `Expected emoji ${emoji} in output`);
+      assert.ok(
+        text.includes(REASON_LABEL[reason]),
+        `Expected label '${REASON_LABEL[reason]}' in output`,
+      );
+    });
+  }
 
-  it("formats review_requested with correct emoji", () => {
-    const n = { ...baseNotification, reason: "review_requested" };
-    const { text } = formatNotification(n, "https://github.com/owner/repo/pull/1");
-
-    assert.ok(text.includes("👀"));
-    assert.ok(text.includes("Review requested"));
-  });
-
-  it("formats comment with correct emoji", () => {
-    const n = { ...baseNotification, reason: "comment" };
-    const { text } = formatNotification(n, "https://github.com/owner/repo/pull/1");
-
-    assert.ok(text.includes("🗨️"));
-    assert.ok(text.includes("Comment"));
-  });
-
-  it("formats assign with correct emoji", () => {
-    const n = { ...baseNotification, reason: "assign" };
-    const { text } = formatNotification(n, "https://github.com/owner/repo/pull/1");
-
-    assert.ok(text.includes("📌"));
-    assert.ok(text.includes("Assigned"));
-  });
-
-  it("handles unknown reason with fallback emoji", () => {
-    const n = { ...baseNotification, reason: "something_new" };
-    const { text } = formatNotification(n, "https://github.com/owner/repo/pull/1");
+  it("handles unknown reason with fallback emoji 🔔", () => {
+    const n = { ...baseNotification, reason: "future_reason" };
+    const { text } = formatNotification(n, url);
 
     assert.ok(text.includes("🔔"));
-    assert.ok(text.includes("something_new"));
+    assert.ok(text.includes("future_reason"));
   });
 
+  it("handles missing reason (undefined)", () => {
+    const n = { ...baseNotification };
+    const { text } = formatNotification(n, url);
+
+    assert.ok(text.includes("🔔"));
+    assert.ok(text.includes("unknown"));
+  });
+});
+
+// ─── formatNotification — output structure ───────────────────────────
+
+describe("formatNotification — output structure", () => {
+  it("includes repo name in code block", () => {
+    const n = {
+      repository: { full_name: "org/project" },
+      subject: { type: "Issue", title: "Bug" },
+      reason: "mention",
+    };
+    const { text } = formatNotification(n, "https://github.com/org/project/issues/1");
+
+    assert.ok(text.includes("<code>org/project</code>"));
+  });
+
+  it("includes subject type and title", () => {
+    const n = {
+      repository: { full_name: "a/b" },
+      subject: { type: "PullRequest", title: "Add feature X" },
+      reason: "comment",
+    };
+    const { text } = formatNotification(n, "https://github.com/a/b/pull/5");
+
+    assert.ok(text.includes("PullRequest: Add feature X"));
+  });
+
+  it("includes clickable link", () => {
+    const n = {
+      repository: { full_name: "a/b" },
+      subject: { type: "Issue", title: "Fix" },
+      reason: "assign",
+    };
+    const link = "https://github.com/a/b/issues/10";
+    const { text } = formatNotification(n, link);
+
+    assert.ok(text.includes(`<a href="${link}">Open on GitHub</a>`));
+  });
+
+  it("wraps reason label in bold", () => {
+    const n = {
+      repository: { full_name: "a/b" },
+      subject: { type: "Issue", title: "Fix" },
+      reason: "review_requested",
+    };
+    const { text } = formatNotification(n, "https://github.com/a/b/pull/1");
+
+    assert.ok(text.includes("<b>Review requested</b>"));
+  });
+
+  it("always returns parseMode HTML", () => {
+    const n = {
+      repository: { full_name: "a/b" },
+      subject: { type: "Issue", title: "x" },
+      reason: "mention",
+    };
+    const { parseMode } = formatNotification(n, "http://example.com");
+
+    assert.equal(parseMode, "HTML");
+  });
+});
+
+// ─── formatNotification — edge cases ─────────────────────────────────
+
+describe("formatNotification — edge cases", () => {
   it("escapes HTML in title", () => {
     const n = {
-      ...baseNotification,
-      reason: "mention",
+      repository: { full_name: "owner/repo" },
       subject: { type: "PullRequest", title: "Fix <script> & stuff" },
+      reason: "mention",
     };
     const { text } = formatNotification(n, "https://github.com/owner/repo/pull/1");
 
     assert.ok(text.includes("&lt;script&gt;"));
     assert.ok(text.includes("&amp;"));
     assert.ok(!text.includes("<script>"));
+  });
+
+  it("escapes HTML in repo name", () => {
+    const n = {
+      repository: { full_name: "<evil>/repo" },
+      subject: { type: "Issue", title: "test" },
+      reason: "mention",
+    };
+    const { text } = formatNotification(n, "https://github.com/evil/repo");
+
+    assert.ok(text.includes("&lt;evil&gt;/repo"));
+    assert.ok(!text.includes("<evil>"));
+  });
+
+  it("handles missing repository", () => {
+    const n = {
+      subject: { type: "PullRequest", title: "test" },
+      reason: "mention",
+    };
+    const { text } = formatNotification(n, "https://github.com");
+
+    assert.ok(text.includes("unknown"));
+  });
+
+  it("handles missing subject", () => {
+    const n = {
+      repository: { full_name: "a/b" },
+      reason: "mention",
+    };
+    const { text } = formatNotification(n, "https://github.com/a/b");
+
+    assert.ok(typeof text === "string");
+    assert.ok(text.includes("a/b"));
+  });
+
+  it("handles completely empty notification", () => {
+    const { text, parseMode } = formatNotification({}, "https://github.com");
+
+    assert.equal(parseMode, "HTML");
+    assert.ok(text.includes("🔔"));
+    assert.ok(text.includes("unknown"));
+  });
+
+  it("handles title with quotes and special URL chars", () => {
+    const n = {
+      repository: { full_name: "a/b" },
+      subject: { type: "PullRequest", title: 'Fix "encoding" issue & param=value' },
+      reason: "comment",
+    };
+    const { text } = formatNotification(n, "https://github.com/a/b/pull/1");
+
+    assert.ok(text.includes("&amp;"));
+    assert.ok(text.includes('"encoding"'));
   });
 });
