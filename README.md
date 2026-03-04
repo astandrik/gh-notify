@@ -19,6 +19,16 @@ GitHub Notifications API
    Your Telegram chat
 ```
 
+## TL;DR
+
+```bash
+git clone https://github.com/astandrik/gh-notify.git && cd gh-notify
+cp .env.example .env
+# fill TG_BOT_TOKEN and GH_TOKEN in .env
+docker compose up -d
+# send /start to your bot in Telegram — done!
+```
+
 ## Quick Start
 
 ### 1. Create a Telegram bot
