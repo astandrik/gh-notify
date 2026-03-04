@@ -191,15 +191,9 @@ export function createBot(token: string, state: AppState): Bot {
 }
 
 function buildSubscriptionKeyboard(state: AppState): InlineKeyboard {
-  const allReasons: string[] = [...ALL_KNOWN_REASONS];
-
-  for (const r of state.subscriptions) {
-    if (!allReasons.includes(r)) allReasons.push(r);
-  }
-
   const keyboard = new InlineKeyboard();
 
-  for (const reason of allReasons) {
+  for (const reason of ALL_KNOWN_REASONS) {
     const active = state.subscriptions.includes(reason);
     const label = `${active ? "✅" : "❌"} ${REASON_LABEL[reason] || reason}`;
     keyboard.text(label, `sub:${reason}`).row();

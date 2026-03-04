@@ -44,6 +44,10 @@ async function getDb(): Promise<Low<AppState>> {
   return db;
 }
 
+function isValidState(data: unknown): data is AppState {
+  return data !== null && typeof data === "object" && !Array.isArray(data);
+}
+
 function repair(state: AppState): void {
   if (!Array.isArray(state.subscriptions)) {
     state.subscriptions = [...DEFAULT_SUBSCRIPTIONS];
@@ -68,6 +72,11 @@ function applyOverrides(state: AppState, overrides: EnvOverrides): void {
 export async function load(envOverrides: EnvOverrides = {}): Promise<AppState> {
   const instance = await getDb();
   await instance.read();
+
+  if (!isValidState(instance.data)) {
+    instance.data = getDefault();
+  }
+
   repair(instance.data);
   applyOverrides(instance.data, envOverrides);
   return instance.data;
