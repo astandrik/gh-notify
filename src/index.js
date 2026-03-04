@@ -28,6 +28,7 @@ async function main() {
       );
 
       let newCount = 0;
+      let hadSendFailure = false;
 
       for (const n of notifications) {
         if (shuttingDown) break;
@@ -50,6 +51,7 @@ async function main() {
           state.seenIds.push(n.id);
         } catch (err) {
           console.error(`[poll] Failed to send message for ${n.id}:`, err.message);
+          hadSendFailure = true;
         }
       }
 
@@ -59,7 +61,12 @@ async function main() {
         state.seenIds = state.seenIds.slice(-MAX_SEEN);
       }
 
-      state.lastModified = lastModified ?? state.lastModified;
+      // Only advance lastModified when all notifications were processed successfully.
+      // Otherwise keep old value so the next poll re-fetches undelivered notifications
+      // (dedup via seenIds prevents re-sending already delivered ones).
+      if (!hadSendFailure && !shuttingDown) {
+        state.lastModified = lastModified ?? state.lastModified;
+      }
       await save(state);
 
       if (newCount > 0) {

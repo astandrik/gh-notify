@@ -98,9 +98,9 @@ export function buildHtmlUrl(notification) {
   const subjectUrl = notification.subject?.url || "";
   const subjectType = notification.subject?.type;
 
-  const base = `https://github.com/${repoFullName}`;
+  if (!repoFullName) return "https://github.com";
 
-  if (!repoFullName) return base;
+  const base = `https://github.com/${repoFullName}`;
 
   if (subjectType === "Discussion") return `${base}/discussions`;
 

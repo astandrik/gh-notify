@@ -95,9 +95,9 @@ describe("buildHtmlUrl", () => {
     assert.equal(buildHtmlUrl(n), "https://github.com/owner/repo");
   });
 
-  it("falls back when repository is missing", () => {
+  it("falls back to github.com when repository is missing", () => {
     const n = { subject: { type: "PullRequest", url: "" } };
-    assert.equal(buildHtmlUrl(n), "https://github.com/undefined");
+    assert.equal(buildHtmlUrl(n), "https://github.com");
   });
 
   it("handles high pull request numbers", () => {

@@ -12,7 +12,28 @@ import { save, DEFAULT_SUBSCRIPTIONS } from "./store.js";
 export function createBot(token, state) {
   const bot = new Bot(token);
 
+  /**
+   * Check if a chat is authorized to configure the bot.
+   * Only private chats are allowed. If chatId is already set,
+   * only the original owner can reconfigure.
+   */
+  function isAuthorized(ctx) {
+    if (ctx.chat.type !== "private") return false;
+    if (state.chatId && state.chatId !== String(ctx.chat.id)) return false;
+    return true;
+  }
+
   bot.command("start", async (ctx) => {
+    if (ctx.chat.type !== "private") {
+      await ctx.reply("⚠️ This bot only works in private chats.");
+      return;
+    }
+
+    if (state.chatId && state.chatId !== String(ctx.chat.id)) {
+      await ctx.reply("🔒 This bot is already configured for another user.");
+      return;
+    }
+
     state.chatId = String(ctx.chat.id);
     await save(state);
 
@@ -43,6 +64,11 @@ export function createBot(token, state) {
       // May fail if bot lacks delete permissions in groups
     }
 
+    if (!isAuthorized(ctx)) {
+      await ctx.reply("🔒 Not authorized. Use /start in a private chat first.");
+      return;
+    }
+
     const text = ctx.message?.text || "";
     const parts = text.split(/\s+/);
     const ghToken = parts[1];
@@ -64,7 +90,6 @@ export function createBot(token, state) {
     }
 
     state.githubToken = ghToken;
-    state.chatId = String(ctx.chat.id);
     state.enabled = true;
     await save(state);
 

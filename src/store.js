@@ -28,8 +28,12 @@ export async function load(envOverrides = {}) {
   try {
     const raw = await readFile(STATE_PATH, "utf-8");
     state = JSON.parse(raw);
-  } catch {
-    state = getDefault();
+  } catch (error) {
+    if (error?.code === "ENOENT" || error instanceof SyntaxError) {
+      state = getDefault();
+    } else {
+      throw error;
+    }
   }
 
   if (envOverrides.ghToken && !state.githubToken) {
@@ -39,7 +43,7 @@ export async function load(envOverrides = {}) {
     state.chatId = envOverrides.chatId;
   }
 
-  if (!state.subscriptions || !state.subscriptions.length) {
+  if (!Array.isArray(state.subscriptions)) {
     state.subscriptions = [...DEFAULT_SUBSCRIPTIONS];
   }
   if (state.enabled === undefined) {

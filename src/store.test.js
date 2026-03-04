@@ -177,7 +177,7 @@ describe("store", () => {
     assert.deepEqual(state.subscriptions, DEFAULT_SUBSCRIPTIONS);
   });
 
-  it("repairs empty subscriptions array", async () => {
+  it("preserves empty subscriptions array (user cleared all)", async () => {
     await mkdir(DATA_DIR, { recursive: true });
     await writeFile(
       STATE_FILE,
@@ -187,7 +187,7 @@ describe("store", () => {
 
     const state = await load();
 
-    assert.deepEqual(state.subscriptions, DEFAULT_SUBSCRIPTIONS);
+    assert.deepEqual(state.subscriptions, []);
   });
 
   it("repairs missing enabled field", async () => {
