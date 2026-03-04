@@ -57,6 +57,8 @@ docker compose up -d
 - Telegram-аккаунт
 - GitHub-аккаунт
 
+> Проект написан на **TypeScript** и запускается через [tsx](https://github.com/privatenumber/tsx) — без шага компиляции.
+
 ---
 
 ## Получение токенов
@@ -284,15 +286,17 @@ PullRequest: Fix vector search
 ```
 gh-notify/
 ├── src/
-│   ├── index.js           # Точка входа: запуск бота + polling loop
-│   ├── bot.js             # Telegram бот (grammy): команды и inline-кнопки
-│   ├── github.js          # GitHub API клиент: polling, mark-as-read, URL
-│   ├── formatter.js       # Форматирование уведомлений → Telegram HTML
-│   ├── store.js           # Персистентное хранилище (JSON файл)
-│   ├── config.js          # Загрузка переменных окружения
-│   ├── formatter.test.js  # Тесты форматирования (31 тест)
-│   ├── github.test.js     # Тесты GitHub API (26 тестов)
-│   └── store.test.js      # Тесты хранилища (22 теста)
+│   ├── types.ts           # Общие TypeScript интерфейсы
+│   ├── index.ts           # Точка входа: запуск бота + polling loop
+│   ├── bot.ts             # Telegram бот (grammy): команды и inline-кнопки
+│   ├── github.ts          # GitHub API клиент: polling, mark-as-read, URL
+│   ├── formatter.ts       # Форматирование уведомлений → Telegram HTML
+│   ├── store.ts           # Персистентное хранилище (JSON файл)
+│   ├── config.ts          # Загрузка переменных окружения
+│   ├── formatter.test.ts  # Тесты форматирования (31 тест)
+│   ├── github.test.ts     # Тесты GitHub API (26 тестов)
+│   └── store.test.ts      # Тесты хранилища (22 теста)
+├── tsconfig.json          # Конфигурация TypeScript (strict)
 ├── data/                  # Рантайм-данные (state.json) — в .gitignore
 ├── package.json
 ├── Dockerfile
@@ -329,21 +333,21 @@ GitHub API: **5,000 запросов/час**.
 npm test
 ```
 
-Или напрямую:
+Проверка типов:
 
 ```bash
-node --test src/**/*.test.js
+npm run typecheck
 ```
 
 Запуск тестов конкретного модуля:
 
 ```bash
-node --test src/github.test.js
-node --test src/formatter.test.js
-node --test src/store.test.js
+npx tsx --test src/github.test.ts
+npx tsx --test src/formatter.test.ts
+npx tsx --test src/store.test.ts
 ```
 
-Текущее покрытие: **79 тестов** — `github.js`, `formatter.js`, `store.js`.
+Текущее покрытие: **79 тестов** — `github.ts`, `formatter.ts`, `store.ts`.
 
 ---
 
