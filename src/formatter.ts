@@ -50,7 +50,7 @@ export function formatNotification(
     "",
     `📦 <code>${repo}</code>`,
     `${type}: ${title}`,
-    `🔗 <a href="${htmlUrl}">Open on GitHub</a>`,
+    `🔗 <a href="${escapeHtml(htmlUrl)}">Open on GitHub</a>`,
   ].join("\n");
 
   return { text, parseMode: "HTML" };

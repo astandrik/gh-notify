@@ -1,7 +1,7 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import { validateToken } from "./github.js";
 import { save } from "./store.js";
-import { REASON_LABEL } from "./formatter.js";
+import { REASON_LABEL, escapeHtml } from "./formatter.js";
 import type { AppState } from "./types.js";
 
 const ALL_KNOWN_REASONS: string[] = Object.keys(REASON_LABEL);
@@ -11,7 +11,8 @@ export function createBot(token: string, state: AppState): Bot {
 
   function isAuthorized(ctx: Context): boolean {
     if (ctx.chat?.type !== "private") return false;
-    if (state.chatId && state.chatId !== String(ctx.chat.id)) return false;
+    if (!state.chatId) return false;
+    if (state.chatId !== String(ctx.chat.id)) return false;
     return true;
   }
 
@@ -84,7 +85,7 @@ export function createBot(token: string, state: AppState): Bot {
     state.enabled = true;
     await save(state);
 
-    await ctx.reply(`✅ Authorized as <b>${login}</b>. Notifications are enabled.`, {
+    await ctx.reply(`✅ Authorized as <b>${escapeHtml(login ?? "")}</b>. Notifications are enabled.`, {
       parse_mode: "HTML",
     });
   });
@@ -134,6 +135,10 @@ export function createBot(token: string, state: AppState): Bot {
   });
 
   bot.command("help", async (ctx) => {
+    if (!isAuthorized(ctx)) {
+      await ctx.reply("🔒 Not authorized. Use /start in a private chat first.");
+      return;
+    }
     const lines: string[] = [
       "🤖 <b>gh-notify</b> — commands:",
       "",
@@ -155,6 +160,11 @@ export function createBot(token: string, state: AppState): Bot {
     }
 
     const reason: string = ctx.match[1];
+
+    if (!ALL_KNOWN_REASONS.includes(reason)) {
+      await ctx.answerCallbackQuery({ text: "Unknown subscription type." });
+      return;
+    }
 
     const idx = state.subscriptions.indexOf(reason);
     if (idx >= 0) {

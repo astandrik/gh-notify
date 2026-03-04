@@ -30,7 +30,11 @@ export async function fetchNotifications(
     return { notifications: [], lastModified };
   }
 
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
+    throw new Error("GitHub API 401: authentication failed. Check your token.");
+  }
+
+  if (res.status === 403) {
     const remaining = res.headers.get("x-ratelimit-remaining");
     if (remaining === "0") {
       const reset = res.headers.get("x-ratelimit-reset");
@@ -38,7 +42,7 @@ export async function fetchNotifications(
       console.warn(`[github] Rate limited. Resets at ${resetDate}. Skipping cycle.`);
       return { notifications: [], lastModified };
     }
-    throw new Error(`GitHub API ${res.status}: authentication failed. Check your token.`);
+    throw new Error("GitHub API 403: forbidden. Check your token permissions.");
   }
 
   if (!res.ok) {

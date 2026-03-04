@@ -198,7 +198,7 @@ describe("fetchNotifications", () => {
 
     await assert.rejects(
       () => fetchNotifications("gh_token_123"),
-      { message: /authentication failed/i },
+      { message: /403.*forbidden/i },
     );
   });
 
