@@ -1,6 +1,8 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import { buildHtmlUrl } from "./github.js";
+import { buildHtmlUrl, fetchNotifications, markAsRead, validateToken } from "./github.js";
+
+// ─── buildHtmlUrl ────────────────────────────────────────────────────
 
 describe("buildHtmlUrl", () => {
   it("converts pull request API URL to HTML URL", () => {
@@ -58,6 +60,17 @@ describe("buildHtmlUrl", () => {
     assert.equal(buildHtmlUrl(n), "https://github.com/owner/repo/discussions");
   });
 
+  it("handles Discussion type even with a valid subject URL", () => {
+    const n = {
+      repository: { full_name: "owner/repo" },
+      subject: {
+        type: "Discussion",
+        url: "https://api.github.com/repos/owner/repo/discussions/5",
+      },
+    };
+    assert.equal(buildHtmlUrl(n), "https://github.com/owner/repo/discussions");
+  });
+
   it("falls back to repo URL for unknown types", () => {
     const n = {
       repository: { full_name: "owner/repo" },
@@ -75,5 +88,257 @@ describe("buildHtmlUrl", () => {
       subject: { type: "PullRequest" },
     };
     assert.equal(buildHtmlUrl(n), "https://github.com/owner/repo");
+  });
+
+  it("falls back when subject is missing entirely", () => {
+    const n = { repository: { full_name: "owner/repo" } };
+    assert.equal(buildHtmlUrl(n), "https://github.com/owner/repo");
+  });
+
+  it("falls back when repository is missing", () => {
+    const n = { subject: { type: "PullRequest", url: "" } };
+    assert.equal(buildHtmlUrl(n), "https://github.com/undefined");
+  });
+
+  it("handles high pull request numbers", () => {
+    const n = {
+      repository: { full_name: "org/monorepo" },
+      subject: {
+        type: "PullRequest",
+        url: "https://api.github.com/repos/org/monorepo/pulls/99999",
+      },
+    };
+    assert.equal(buildHtmlUrl(n), "https://github.com/org/monorepo/pull/99999");
+  });
+
+  it("handles repos with dots and hyphens in name", () => {
+    const n = {
+      repository: { full_name: "my-org/my.repo-name" },
+      subject: {
+        type: "Issue",
+        url: "https://api.github.com/repos/my-org/my.repo-name/issues/7",
+      },
+    };
+    assert.equal(buildHtmlUrl(n), "https://github.com/my-org/my.repo-name/issues/7");
+  });
+});
+
+// ─── fetchNotifications ──────────────────────────────────────────────
+
+describe("fetchNotifications", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("returns notifications on 200", async () => {
+    const fakeNotifications = [
+      { id: "1", reason: "mention", repository: { full_name: "a/b" } },
+    ];
+
+    globalThis.fetch = mock.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => fakeNotifications,
+      headers: new Map([["last-modified", "Thu, 01 Jan 2026 00:00:00 GMT"]]),
+    }));
+
+    const result = await fetchNotifications("gh_token_123");
+
+    assert.equal(result.notifications.length, 1);
+    assert.equal(result.notifications[0].id, "1");
+    assert.equal(result.lastModified, "Thu, 01 Jan 2026 00:00:00 GMT");
+  });
+
+  it("returns empty array on 304 Not Modified", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      status: 304,
+      ok: false,
+      headers: new Map(),
+    }));
+
+    const result = await fetchNotifications("gh_token_123", "some-date");
+
+    assert.deepEqual(result.notifications, []);
+    assert.equal(result.lastModified, "some-date");
+  });
+
+  it("throws on 401 unauthorized", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      status: 401,
+      ok: false,
+      headers: new Map([["x-ratelimit-remaining", "4999"]]),
+    }));
+
+    await assert.rejects(
+      () => fetchNotifications("bad_token"),
+      { message: /authentication failed/i },
+    );
+  });
+
+  it("skips cycle on rate limit (403 + remaining=0)", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      status: 403,
+      ok: false,
+      headers: new Map([
+        ["x-ratelimit-remaining", "0"],
+        ["x-ratelimit-reset", "1700000000"],
+      ]),
+    }));
+
+    const result = await fetchNotifications("gh_token_123", "old-date");
+
+    assert.deepEqual(result.notifications, []);
+    assert.equal(result.lastModified, "old-date");
+  });
+
+  it("throws on 403 that is not rate limit", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      status: 403,
+      ok: false,
+      headers: new Map([["x-ratelimit-remaining", "100"]]),
+    }));
+
+    await assert.rejects(
+      () => fetchNotifications("gh_token_123"),
+      { message: /authentication failed/i },
+    );
+  });
+
+  it("throws on unexpected HTTP errors (500)", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      status: 500,
+      ok: false,
+      statusText: "Internal Server Error",
+      headers: new Map(),
+    }));
+
+    await assert.rejects(
+      () => fetchNotifications("gh_token_123"),
+      { message: /500.*Internal Server Error/i },
+    );
+  });
+
+  it("sends If-Modified-Since header when lastModified provided", async () => {
+    let capturedHeaders;
+
+    globalThis.fetch = mock.fn(async (_url, opts) => {
+      capturedHeaders = opts.headers;
+      return {
+        status: 304,
+        ok: false,
+        headers: new Map(),
+      };
+    });
+
+    await fetchNotifications("token", "Wed, 01 Jan 2025 00:00:00 GMT");
+
+    assert.equal(capturedHeaders["If-Modified-Since"], "Wed, 01 Jan 2025 00:00:00 GMT");
+  });
+
+  it("does not send If-Modified-Since when lastModified is null", async () => {
+    let capturedHeaders;
+
+    globalThis.fetch = mock.fn(async (_url, opts) => {
+      capturedHeaders = opts.headers;
+      return {
+        status: 200,
+        ok: true,
+        json: async () => [],
+        headers: new Map(),
+      };
+    });
+
+    await fetchNotifications("token", null);
+
+    assert.equal(capturedHeaders["If-Modified-Since"], undefined);
+  });
+
+  it("preserves lastModified when response has no Last-Modified header", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => [],
+      headers: new Map(),
+    }));
+
+    const result = await fetchNotifications("token", "old-value");
+    assert.equal(result.lastModified, "old-value");
+  });
+});
+
+// ─── markAsRead ──────────────────────────────────────────────────────
+
+describe("markAsRead", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("sends PATCH request to correct thread URL", async () => {
+    let capturedUrl, capturedMethod;
+
+    globalThis.fetch = mock.fn(async (url, opts) => {
+      capturedUrl = url;
+      capturedMethod = opts.method;
+      return { ok: true, status: 205 };
+    });
+
+    await markAsRead("token123", "thread_42");
+
+    assert.ok(capturedUrl.includes("/notifications/threads/thread_42"));
+    assert.equal(capturedMethod, "PATCH");
+  });
+
+  it("does not throw on non-ok response", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      ok: false,
+      status: 404,
+    }));
+
+    await assert.doesNotReject(() => markAsRead("token123", "missing_thread"));
+  });
+});
+
+// ─── validateToken ───────────────────────────────────────────────────
+
+describe("validateToken", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("returns valid=true and login on success", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ login: "astandrik" }),
+    }));
+
+    const result = await validateToken("good_token");
+
+    assert.equal(result.valid, true);
+    assert.equal(result.login, "astandrik");
+  });
+
+  it("returns valid=false on 401", async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      ok: false,
+      status: 401,
+    }));
+
+    const result = await validateToken("bad_token");
+    assert.equal(result.valid, false);
+  });
+
+  it("returns valid=false on network error", async () => {
+    globalThis.fetch = mock.fn(async () => {
+      throw new Error("network error");
+    });
+
+    const result = await validateToken("whatever");
+    assert.equal(result.valid, false);
   });
 });
