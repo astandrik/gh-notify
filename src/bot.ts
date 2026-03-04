@@ -28,6 +28,7 @@ export function createBot(token: string, state: AppState): Bot {
     }
 
     state.chatId = String(ctx.chat.id);
+    console.log(`[bot] Chat ID claimed by user ${ctx.chat.id}`);
     await save(state);
 
     const hasGh = Boolean(state.githubToken);
@@ -50,10 +51,11 @@ export function createBot(token: string, state: AppState): Bot {
   });
 
   bot.command("auth", async (ctx) => {
+    let messageDeleted = true;
     try {
       await ctx.deleteMessage();
     } catch {
-      // May fail if bot lacks delete permissions
+      messageDeleted = false;
     }
 
     if (!isAuthorized(ctx)) {
@@ -85,9 +87,14 @@ export function createBot(token: string, state: AppState): Bot {
     state.enabled = true;
     await save(state);
 
-    await ctx.reply(`✅ Authorized as <b>${escapeHtml(login ?? "")}</b>. Notifications are enabled.`, {
-      parse_mode: "HTML",
-    });
+    const warning = messageDeleted
+      ? ""
+      : "\n\n⚠️ Could not delete your message with the token. Please delete it manually for security.";
+
+    await ctx.reply(
+      `✅ Authorized as <b>${escapeHtml(login ?? "")}</b>. Notifications are enabled.${warning}`,
+      { parse_mode: "HTML" },
+    );
   });
 
   bot.command("subscribe", async (ctx) => {
@@ -173,9 +180,7 @@ export function createBot(token: string, state: AppState): Bot {
       state.subscriptions.push(reason);
     }
 
-    if (state.subscriptions.length > 0) {
-      state.enabled = true;
-    }
+    state.enabled = state.subscriptions.length > 0;
 
     await save(state);
 

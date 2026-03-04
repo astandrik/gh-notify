@@ -117,7 +117,7 @@ async function main(): Promise<void> {
   console.log(`[bot] GitHub token: ${state.githubToken ? "configured" : "not set"}`);
   console.log(`[bot] Chat ID: ${state.chatId || "not set (use /start)"}`);
 
-  bot.start({
+  await bot.start({
     onStart: () => console.log("[bot] Telegram bot is running."),
   }).catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
