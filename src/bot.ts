@@ -1,27 +1,16 @@
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, InlineKeyboard, type Context } from "grammy";
 import { validateToken } from "./github.js";
-import { save, DEFAULT_SUBSCRIPTIONS } from "./store.js";
+import { save } from "./store.js";
 import { REASON_LABEL } from "./formatter.js";
+import type { AppState } from "./types.js";
 
-const ALL_KNOWN_REASONS = Object.keys(REASON_LABEL);
+const ALL_KNOWN_REASONS: string[] = Object.keys(REASON_LABEL);
 
-/**
- * Create and configure the Telegram bot.
- *
- * @param {string} token   Telegram bot token
- * @param {object} state   Shared mutable state object (from store.load)
- * @returns {Bot}
- */
-export function createBot(token, state) {
+export function createBot(token: string, state: AppState): Bot {
   const bot = new Bot(token);
 
-  /**
-   * Check if a chat is authorized to configure the bot.
-   * Only private chats are allowed. If chatId is already set,
-   * only the original owner can reconfigure.
-   */
-  function isAuthorized(ctx) {
-    if (ctx.chat.type !== "private") return false;
+  function isAuthorized(ctx: Context): boolean {
+    if (ctx.chat?.type !== "private") return false;
     if (state.chatId && state.chatId !== String(ctx.chat.id)) return false;
     return true;
   }
@@ -41,7 +30,7 @@ export function createBot(token, state) {
     await save(state);
 
     const hasGh = Boolean(state.githubToken);
-    const lines = [
+    const lines: string[] = [
       "🤖 <b>gh-notify</b> — GitHub → Telegram notifications",
       "",
       hasGh
@@ -130,7 +119,7 @@ export function createBot(token, state) {
       ? state.subscriptions.map((s) => `• ${s}`).join("\n")
       : "• none";
 
-    const lines = [
+    const lines: string[] = [
       "📊 <b>Status</b>",
       "",
       `GitHub: ${state.githubToken ? "✅ connected" : "❌ not connected"}`,
@@ -145,7 +134,7 @@ export function createBot(token, state) {
   });
 
   bot.command("help", async (ctx) => {
-    const lines = [
+    const lines: string[] = [
       "🤖 <b>gh-notify</b> — commands:",
       "",
       "/start — initialize bot and detect chat ID",
@@ -165,7 +154,7 @@ export function createBot(token, state) {
       return;
     }
 
-    const reason = ctx.match[1];
+    const reason: string = ctx.match[1];
 
     const idx = state.subscriptions.indexOf(reason);
     if (idx >= 0) {
@@ -191,12 +180,8 @@ export function createBot(token, state) {
   return bot;
 }
 
-/**
- * Build an inline keyboard with toggle buttons for ALL known event types.
- * Shows all reasons from REASON_LABEL plus any custom ones in state.subscriptions.
- */
-function buildSubscriptionKeyboard(state) {
-  const allReasons = [...ALL_KNOWN_REASONS];
+function buildSubscriptionKeyboard(state: AppState): InlineKeyboard {
+  const allReasons: string[] = [...ALL_KNOWN_REASONS];
 
   for (const r of state.subscriptions) {
     if (!allReasons.includes(r)) allReasons.push(r);

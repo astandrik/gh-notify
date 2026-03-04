@@ -1,7 +1,9 @@
+import type { GitHubNotification, FetchResult, TokenValidation } from "./types.js";
+
 const API_BASE = "https://api.github.com";
 const USER_AGENT = "gh-notify-telegram-bot";
 
-function headers(token, extra = {}) {
+function headers(token: string, extra: Record<string, string> = {}): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
     "User-Agent": USER_AGENT,
@@ -10,16 +12,11 @@ function headers(token, extra = {}) {
   };
 }
 
-/**
- * Fetch new GitHub notifications.
- * Uses If-Modified-Since for efficient polling (304 = no new data).
- *
- * @param {string} token   GitHub PAT
- * @param {string|null} lastModified  value from previous Last-Modified header
- * @returns {{ notifications: object[], lastModified: string|null }}
- */
-export async function fetchNotifications(token, lastModified = null) {
-  const extra = {};
+export async function fetchNotifications(
+  token: string,
+  lastModified: string | null = null,
+): Promise<FetchResult> {
+  const extra: Record<string, string> = {};
   if (lastModified) {
     extra["If-Modified-Since"] = lastModified;
   }
@@ -48,16 +45,13 @@ export async function fetchNotifications(token, lastModified = null) {
     throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
   }
 
-  const notifications = await res.json();
+  const notifications = (await res.json()) as GitHubNotification[];
   const newLastModified = res.headers.get("last-modified") || lastModified;
 
   return { notifications, lastModified: newLastModified };
 }
 
-/**
- * Mark a single notification thread as read.
- */
-export async function markAsRead(token, threadId) {
+export async function markAsRead(token: string, threadId: string): Promise<void> {
   const res = await fetch(
     `${API_BASE}/notifications/threads/${threadId}`,
     { method: "PATCH", headers: headers(token) },
@@ -68,15 +62,11 @@ export async function markAsRead(token, threadId) {
   }
 }
 
-/**
- * Validate a GitHub token by fetching the authenticated user.
- * @returns {{ valid: boolean, login?: string }}
- */
-export async function validateToken(token) {
+export async function validateToken(token: string): Promise<TokenValidation> {
   try {
     const res = await fetch(`${API_BASE}/user`, { headers: headers(token) });
     if (res.ok) {
-      const user = await res.json();
+      const user = (await res.json()) as { login: string };
       return { valid: true, login: user.login };
     }
     return { valid: false };
@@ -85,15 +75,7 @@ export async function validateToken(token) {
   }
 }
 
-/**
- * Convert a GitHub API notification into a clickable HTML URL.
- *
- * subject.url examples:
- *   https://api.github.com/repos/owner/repo/pulls/123
- *   https://api.github.com/repos/owner/repo/issues/456
- *   https://api.github.com/repos/owner/repo/commits/abc123
- */
-export function buildHtmlUrl(notification) {
+export function buildHtmlUrl(notification: GitHubNotification): string {
   const repoFullName = notification.repository?.full_name;
   const subjectUrl = notification.subject?.url || "";
   const subjectType = notification.subject?.type;

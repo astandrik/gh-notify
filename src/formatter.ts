@@ -1,4 +1,6 @@
-const EMOJI_MAP = {
+import type { GitHubNotification, FormattedMessage } from "./types.js";
+
+const EMOJI_MAP: Record<string, string> = {
   mention: "💬",
   review_requested: "👀",
   assign: "📌",
@@ -11,7 +13,7 @@ const EMOJI_MAP = {
   author: "✍️",
 };
 
-const REASON_LABEL = {
+const REASON_LABEL: Record<string, string> = {
   mention: "Mention",
   review_requested: "Review requested",
   assign: "Assigned",
@@ -24,10 +26,7 @@ const REASON_LABEL = {
   author: "Author",
 };
 
-/**
- * Escape HTML special characters for Telegram HTML parse mode.
- */
-function escapeHtml(text) {
+function escapeHtml(text: string | null | undefined): string {
   if (!text) return "";
   return text
     .replace(/&/g, "&amp;")
@@ -35,14 +34,10 @@ function escapeHtml(text) {
     .replace(/>/g, "&gt;");
 }
 
-/**
- * Format a GitHub notification into a Telegram message.
- *
- * @param {object} notification  GitHub notification object
- * @param {string} htmlUrl       clickable URL to the item
- * @returns {{ text: string, parseMode: string }}
- */
-export function formatNotification(notification, htmlUrl) {
+export function formatNotification(
+  notification: GitHubNotification,
+  htmlUrl: string,
+): FormattedMessage {
   const reason = notification.reason || "unknown";
   const emoji = EMOJI_MAP[reason] || "🔔";
   const label = REASON_LABEL[reason] || reason;

@@ -1,16 +1,17 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import type { AppState, EnvOverrides } from "./types.js";
 
-const STATE_PATH = resolve("data", "state.json");
+const STATE_PATH: string = resolve("data", "state.json");
 
-const DEFAULT_SUBSCRIPTIONS = [
+const DEFAULT_SUBSCRIPTIONS: string[] = [
   "mention",
   "review_requested",
   "comment",
   "assign",
 ];
 
-function getDefault() {
+function getDefault(): AppState {
   return {
     chatId: null,
     githubToken: null,
@@ -21,15 +22,21 @@ function getDefault() {
   };
 }
 
-export async function load(envOverrides = {}) {
+export async function load(envOverrides: EnvOverrides = {}): Promise<AppState> {
   await mkdir(dirname(STATE_PATH), { recursive: true });
 
-  let state;
+  let state: AppState;
   try {
     const raw = await readFile(STATE_PATH, "utf-8");
-    state = JSON.parse(raw);
-  } catch (error) {
-    if (error?.code === "ENOENT" || error instanceof SyntaxError) {
+    state = JSON.parse(raw) as AppState;
+  } catch (error: unknown) {
+    const isNotFound =
+      error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT";
+
+    if (isNotFound || error instanceof SyntaxError) {
       state = getDefault();
     } else {
       throw error;
@@ -56,9 +63,9 @@ export async function load(envOverrides = {}) {
   return state;
 }
 
-let saveQueue = Promise.resolve();
+let saveQueue: Promise<void> = Promise.resolve();
 
-async function writeState(serialized) {
+async function writeState(serialized: string): Promise<void> {
   await mkdir(dirname(STATE_PATH), { recursive: true });
 
   const tmp = `${STATE_PATH}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
@@ -66,7 +73,7 @@ async function writeState(serialized) {
   await rename(tmp, STATE_PATH);
 }
 
-export function save(state) {
+export function save(state: AppState): Promise<void> {
   const serialized = JSON.stringify(state, null, 2);
 
   saveQueue = saveQueue.then(
