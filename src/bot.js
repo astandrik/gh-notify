@@ -1,6 +1,9 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { validateToken } from "./github.js";
 import { save, DEFAULT_SUBSCRIPTIONS } from "./store.js";
+import { REASON_LABEL } from "./formatter.js";
+
+const ALL_KNOWN_REASONS = Object.keys(REASON_LABEL);
 
 /**
  * Create and configure the Telegram bot.
@@ -57,11 +60,10 @@ export function createBot(token, state) {
   });
 
   bot.command("auth", async (ctx) => {
-    // Delete the message with the token for security
     try {
       await ctx.deleteMessage();
     } catch {
-      // May fail if bot lacks delete permissions in groups
+      // May fail if bot lacks delete permissions
     }
 
     if (!isAuthorized(ctx)) {
@@ -99,6 +101,10 @@ export function createBot(token, state) {
   });
 
   bot.command("subscribe", async (ctx) => {
+    if (!isAuthorized(ctx)) {
+      await ctx.reply("🔒 Not authorized. Use /start in a private chat first.");
+      return;
+    }
     await ctx.reply(
       "Toggle event types to receive:",
       { parse_mode: "HTML", reply_markup: buildSubscriptionKeyboard(state) },
@@ -106,12 +112,20 @@ export function createBot(token, state) {
   });
 
   bot.command("unsubscribe", async (ctx) => {
+    if (!isAuthorized(ctx)) {
+      await ctx.reply("🔒 Not authorized. Use /start in a private chat first.");
+      return;
+    }
     state.enabled = false;
     await save(state);
     await ctx.reply("🔕 Notifications disabled.\nUse /subscribe to re-enable.");
   });
 
   bot.command("status", async (ctx) => {
+    if (!isAuthorized(ctx)) {
+      await ctx.reply("🔒 Not authorized. Use /start in a private chat first.");
+      return;
+    }
     const subs = state.subscriptions.length
       ? state.subscriptions.map((s) => `• ${s}`).join("\n")
       : "• none";
@@ -145,8 +159,12 @@ export function createBot(token, state) {
     await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
   });
 
-  // Handle inline keyboard callbacks for subscription toggles
   bot.callbackQuery(/^sub:(.+)$/, async (ctx) => {
+    if (!isAuthorized(ctx)) {
+      await ctx.answerCallbackQuery({ text: "Not authorized" });
+      return;
+    }
+
     const reason = ctx.match[1];
 
     const idx = state.subscriptions.indexOf(reason);
@@ -156,7 +174,6 @@ export function createBot(token, state) {
       state.subscriptions.push(reason);
     }
 
-    // Re-enable if user is subscribing to something
     if (state.subscriptions.length > 0) {
       state.enabled = true;
     }
@@ -175,12 +192,12 @@ export function createBot(token, state) {
 }
 
 /**
- * Build an inline keyboard with toggle buttons for each event type.
+ * Build an inline keyboard with toggle buttons for ALL known event types.
+ * Shows all reasons from REASON_LABEL plus any custom ones in state.subscriptions.
  */
 function buildSubscriptionKeyboard(state) {
-  const allReasons = [...DEFAULT_SUBSCRIPTIONS];
+  const allReasons = [...ALL_KNOWN_REASONS];
 
-  // Add any extra reasons the user might have from the API
   for (const r of state.subscriptions) {
     if (!allReasons.includes(r)) allReasons.push(r);
   }
@@ -189,7 +206,7 @@ function buildSubscriptionKeyboard(state) {
 
   for (const reason of allReasons) {
     const active = state.subscriptions.includes(reason);
-    const label = `${active ? "✅" : "❌"} ${reason}`;
+    const label = `${active ? "✅" : "❌"} ${REASON_LABEL[reason] || reason}`;
     keyboard.text(label, `sub:${reason}`).row();
   }
 
