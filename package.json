@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "GitHub notifications → Telegram bot. Polls GitHub API and forwards mentions, review requests, comments, and assignments to your Telegram chat.",
   "type": "module",
-  "main": "src/index.js",
+  "main": "src/index.ts",
   "scripts": {
-    "start": "node src/index.js",
-    "test": "node --test src/**/*.test.js"
+    "start": "tsx src/index.ts",
+    "test": "tsx --test src/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -26,5 +27,10 @@
   "homepage": "https://github.com/astandrik/gh-notify#readme",
   "dependencies": {
     "grammy": "^1.41.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }
