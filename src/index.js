@@ -13,14 +13,15 @@ async function main() {
   const bot = createBot(config.tgBotToken, state);
 
   // GitHub notifications polling loop
-  let polling = false;
+  let pollPromise = null;
+  let shuttingDown = false;
 
   async function pollNotifications() {
-    if (polling) return;
+    if (shuttingDown) return;
+    if (pollPromise) return;
     if (!state.enabled || !state.githubToken || !state.chatId) return;
 
-    polling = true;
-    try {
+    const run = async () => {
       const { notifications, lastModified } = await fetchNotifications(
         state.githubToken,
         state.lastModified,
@@ -29,6 +30,7 @@ async function main() {
       let newCount = 0;
 
       for (const n of notifications) {
+        if (shuttingDown) break;
         if (state.seenIds.includes(n.id)) continue;
         if (!state.subscriptions.includes(n.reason)) continue;
 
@@ -38,17 +40,17 @@ async function main() {
         try {
           await bot.api.sendMessage(state.chatId, text, { parse_mode: parseMode });
           newCount++;
+
+          try {
+            await markAsRead(state.githubToken, n.id);
+          } catch (err) {
+            console.warn(`[poll] Failed to mark ${n.id} as read:`, err.message);
+          }
+
+          state.seenIds.push(n.id);
         } catch (err) {
           console.error(`[poll] Failed to send message for ${n.id}:`, err.message);
         }
-
-        try {
-          await markAsRead(state.githubToken, n.id);
-        } catch (err) {
-          console.warn(`[poll] Failed to mark ${n.id} as read:`, err.message);
-        }
-
-        state.seenIds.push(n.id);
       }
 
       // Cap seenIds to prevent unbounded growth
@@ -63,11 +65,13 @@ async function main() {
       if (newCount > 0) {
         console.log(`[poll] Sent ${newCount} notification(s)`);
       }
-    } catch (err) {
-      console.error("[poll] Error:", err.message);
-    } finally {
-      polling = false;
-    }
+    };
+
+    pollPromise = run()
+      .catch((err) => console.error("[poll] Error:", err.message))
+      .finally(() => { pollPromise = null; });
+
+    return pollPromise;
   }
 
   // Start polling
@@ -77,16 +81,27 @@ async function main() {
   pollNotifications();
 
   // Graceful shutdown
-  function shutdown(signal) {
+  let shutdownInProgress = false;
+
+  async function shutdown(signal) {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+    shuttingDown = true;
+
     console.log(`\n[shutdown] Received ${signal}. Saving state and stopping...`);
     clearInterval(intervalId);
-    save(state)
-      .then(() => bot.stop())
-      .then(() => process.exit(0))
-      .catch((err) => {
-        console.error("[shutdown] Error:", err.message);
-        process.exit(1);
-      });
+
+    try {
+      if (pollPromise) {
+        await pollPromise;
+      }
+      await save(state);
+      bot.stop();
+      process.exit(0);
+    } catch (err) {
+      console.error("[shutdown] Error:", err.message);
+      process.exit(1);
+    }
   }
 
   process.on("SIGINT", () => shutdown("SIGINT"));

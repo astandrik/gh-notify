@@ -52,13 +52,25 @@ export async function load(envOverrides = {}) {
   return state;
 }
 
-export async function save(state) {
+let saveQueue = Promise.resolve();
+
+async function writeState(serialized) {
   await mkdir(dirname(STATE_PATH), { recursive: true });
 
-  const tmp = STATE_PATH + ".tmp";
-  await writeFile(tmp, JSON.stringify(state, null, 2), "utf-8");
-
+  const tmp = `${STATE_PATH}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+  await writeFile(tmp, serialized, "utf-8");
   await rename(tmp, STATE_PATH);
+}
+
+export function save(state) {
+  const serialized = JSON.stringify(state, null, 2);
+
+  saveQueue = saveQueue.then(
+    () => writeState(serialized),
+    () => writeState(serialized),
+  );
+
+  return saveQueue;
 }
 
 export { DEFAULT_SUBSCRIPTIONS };
