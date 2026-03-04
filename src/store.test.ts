@@ -240,7 +240,7 @@ describe("store", () => {
     await rm(DATA_DIR, { recursive: true, force: true });
 
     const state = await load();
-    assert.ok(state); // load succeeds
+    assert.ok(state);
 
     state.chatId = "test";
     await save(state);
@@ -252,7 +252,8 @@ describe("store", () => {
   it("creates data directory on save if missing", async () => {
     await rm(DATA_DIR, { recursive: true, force: true });
 
-    const state = { chatId: "x", enabled: true, subscriptions: ["mention"], seenIds: [] };
+    const state = await load();
+    state.chatId = "x";
     await save(state);
 
     const raw = await readFile(STATE_FILE, "utf-8");

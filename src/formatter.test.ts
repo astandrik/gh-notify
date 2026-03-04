@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { formatNotification, escapeHtml, EMOJI_MAP, REASON_LABEL } from "./formatter.js";
+import type { GitHubNotification } from "./types.js";
 
 // ─── escapeHtml ──────────────────────────────────────────────────────
 
@@ -41,15 +42,17 @@ describe("escapeHtml", () => {
 // ─── formatNotification — all known reason types ─────────────────────
 
 describe("formatNotification — all reason types", () => {
-  const baseNotification = {
+  const baseNotification: GitHubNotification = {
+    id: "1",
+    reason: "mention",
     repository: { full_name: "owner/repo" },
-    subject: { type: "PullRequest", title: "Test PR" },
+    subject: { type: "PullRequest", title: "Test PR", url: "" },
   };
   const url = "https://github.com/owner/repo/pull/1";
 
   for (const [reason, emoji] of Object.entries(EMOJI_MAP)) {
     it(`formats '${reason}' with emoji ${emoji}`, () => {
-      const n = { ...baseNotification, reason };
+      const n: GitHubNotification = { ...baseNotification, reason };
       const { text, parseMode } = formatNotification(n, url);
 
       assert.equal(parseMode, "HTML");
@@ -62,7 +65,7 @@ describe("formatNotification — all reason types", () => {
   }
 
   it("handles unknown reason with fallback emoji 🔔", () => {
-    const n = { ...baseNotification, reason: "future_reason" };
+    const n: GitHubNotification = { ...baseNotification, reason: "future_reason" };
     const { text } = formatNotification(n, url);
 
     assert.ok(text.includes("🔔"));
@@ -70,8 +73,8 @@ describe("formatNotification — all reason types", () => {
   });
 
   it("handles missing reason (undefined)", () => {
-    const n = { ...baseNotification };
-    const { text } = formatNotification(n, url);
+    const n = { id: "1", reason: "", repository: { full_name: "owner/repo" }, subject: { type: "PullRequest", title: "Test", url: "" } } satisfies GitHubNotification;
+    const { text } = formatNotification({ ...n, reason: undefined as unknown as string }, url);
 
     assert.ok(text.includes("🔔"));
     assert.ok(text.includes("unknown"));
@@ -82,10 +85,11 @@ describe("formatNotification — all reason types", () => {
 
 describe("formatNotification — output structure", () => {
   it("includes repo name in code block", () => {
-    const n = {
-      repository: { full_name: "org/project" },
-      subject: { type: "Issue", title: "Bug" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "mention",
+      repository: { full_name: "org/project" },
+      subject: { type: "Issue", title: "Bug", url: "" },
     };
     const { text } = formatNotification(n, "https://github.com/org/project/issues/1");
 
@@ -93,10 +97,11 @@ describe("formatNotification — output structure", () => {
   });
 
   it("includes subject type and title", () => {
-    const n = {
-      repository: { full_name: "a/b" },
-      subject: { type: "PullRequest", title: "Add feature X" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "comment",
+      repository: { full_name: "a/b" },
+      subject: { type: "PullRequest", title: "Add feature X", url: "" },
     };
     const { text } = formatNotification(n, "https://github.com/a/b/pull/5");
 
@@ -104,10 +109,11 @@ describe("formatNotification — output structure", () => {
   });
 
   it("includes clickable link", () => {
-    const n = {
-      repository: { full_name: "a/b" },
-      subject: { type: "Issue", title: "Fix" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "assign",
+      repository: { full_name: "a/b" },
+      subject: { type: "Issue", title: "Fix", url: "" },
     };
     const link = "https://github.com/a/b/issues/10";
     const { text } = formatNotification(n, link);
@@ -116,10 +122,11 @@ describe("formatNotification — output structure", () => {
   });
 
   it("wraps reason label in bold", () => {
-    const n = {
-      repository: { full_name: "a/b" },
-      subject: { type: "Issue", title: "Fix" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "review_requested",
+      repository: { full_name: "a/b" },
+      subject: { type: "Issue", title: "Fix", url: "" },
     };
     const { text } = formatNotification(n, "https://github.com/a/b/pull/1");
 
@@ -127,10 +134,11 @@ describe("formatNotification — output structure", () => {
   });
 
   it("always returns parseMode HTML", () => {
-    const n = {
-      repository: { full_name: "a/b" },
-      subject: { type: "Issue", title: "x" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "mention",
+      repository: { full_name: "a/b" },
+      subject: { type: "Issue", title: "x", url: "" },
     };
     const { parseMode } = formatNotification(n, "http://example.com");
 
@@ -142,10 +150,11 @@ describe("formatNotification — output structure", () => {
 
 describe("formatNotification — edge cases", () => {
   it("escapes HTML in title", () => {
-    const n = {
-      repository: { full_name: "owner/repo" },
-      subject: { type: "PullRequest", title: "Fix <script> & stuff" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "mention",
+      repository: { full_name: "owner/repo" },
+      subject: { type: "PullRequest", title: "Fix <script> & stuff", url: "" },
     };
     const { text } = formatNotification(n, "https://github.com/owner/repo/pull/1");
 
@@ -155,10 +164,11 @@ describe("formatNotification — edge cases", () => {
   });
 
   it("escapes HTML in repo name", () => {
-    const n = {
-      repository: { full_name: "<evil>/repo" },
-      subject: { type: "Issue", title: "test" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "mention",
+      repository: { full_name: "<evil>/repo" },
+      subject: { type: "Issue", title: "test", url: "" },
     };
     const { text } = formatNotification(n, "https://github.com/evil/repo");
 
@@ -167,9 +177,10 @@ describe("formatNotification — edge cases", () => {
   });
 
   it("handles missing repository", () => {
-    const n = {
-      subject: { type: "PullRequest", title: "test" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "mention",
+      subject: { type: "PullRequest", title: "test", url: "" },
     };
     const { text } = formatNotification(n, "https://github.com");
 
@@ -177,9 +188,10 @@ describe("formatNotification — edge cases", () => {
   });
 
   it("handles missing subject", () => {
-    const n = {
-      repository: { full_name: "a/b" },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "mention",
+      repository: { full_name: "a/b" },
     };
     const { text } = formatNotification(n, "https://github.com/a/b");
 
@@ -188,7 +200,8 @@ describe("formatNotification — edge cases", () => {
   });
 
   it("handles completely empty notification", () => {
-    const { text, parseMode } = formatNotification({}, "https://github.com");
+    const n = { id: "", reason: "" } as GitHubNotification;
+    const { text, parseMode } = formatNotification(n, "https://github.com");
 
     assert.equal(parseMode, "HTML");
     assert.ok(text.includes("🔔"));
@@ -196,10 +209,11 @@ describe("formatNotification — edge cases", () => {
   });
 
   it("handles title with quotes and special URL chars", () => {
-    const n = {
-      repository: { full_name: "a/b" },
-      subject: { type: "PullRequest", title: 'Fix "encoding" issue & param=value' },
+    const n: GitHubNotification = {
+      id: "1",
       reason: "comment",
+      repository: { full_name: "a/b" },
+      subject: { type: "PullRequest", title: 'Fix "encoding" issue & param=value', url: "" },
     };
     const { text } = formatNotification(n, "https://github.com/a/b/pull/1");
 
