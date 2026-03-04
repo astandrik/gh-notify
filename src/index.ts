@@ -119,6 +119,10 @@ async function main(): Promise<void> {
 
   bot.start({
     onStart: () => console.log("[bot] Telegram bot is running."),
+  }).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[bot] Failed to start Telegram bot:", message);
+    shutdown("BOT_ERROR");
   });
 }
 

@@ -46,7 +46,20 @@ export async function fetchNotifications(
         throw new Error("GitHub API 401: authentication failed. Check your token.");
       }
       if (error.status === 403) {
+        const remaining = error.response?.headers?.["x-ratelimit-remaining"];
+        if (remaining === "0") {
+          const reset = error.response?.headers?.["x-ratelimit-reset"];
+          const resetDate = reset ? new Date(Number(reset) * 1000).toISOString() : "unknown";
+          console.warn(`[github] Rate limited. Resets at ${resetDate}. Skipping cycle.`);
+          return { notifications: [], lastModified };
+        }
         throw new Error("GitHub API 403: forbidden. Check your token permissions.");
+      }
+      if (error.status === 429) {
+        const reset = error.response?.headers?.["x-ratelimit-reset"];
+        const resetDate = reset ? new Date(Number(reset) * 1000).toISOString() : "unknown";
+        console.warn(`[github] Rate limited (429). Resets at ${resetDate}. Skipping cycle.`);
+        return { notifications: [], lastModified };
       }
       throw new Error(`GitHub API ${error.status}: ${error.message}`);
     }

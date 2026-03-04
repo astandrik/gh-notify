@@ -117,7 +117,7 @@ export function createBot(token: string, state: AppState): Bot {
       return;
     }
     const subs = state.subscriptions.length
-      ? state.subscriptions.map((s) => `• ${s}`).join("\n")
+      ? state.subscriptions.map((s) => `• ${escapeHtml(s)}`).join("\n")
       : "• none";
 
     const lines: string[] = [

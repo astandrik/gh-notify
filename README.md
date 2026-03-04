@@ -184,32 +184,23 @@ npm start
 Или напрямую:
 
 ```bash
-node src/index.js
+npx tsx src/index.ts
 ```
+
+> ⚠️ `npm start` и `npx tsx` не загружают `.env` автоматически. Экспортируй переменные перед запуском или используй Docker (рекомендуется).
 
 **Запуск в фоне (через systemd / pm2 / nohup):**
 
 ```bash
 # pm2 (рекомендуется для production)
 npm install -g pm2
-pm2 start src/index.js --name gh-notify
+pm2 start npx --name gh-notify -- tsx src/index.ts
 pm2 save
 pm2 startup
 
 # или через nohup
 nohup npm start > gh-notify.log 2>&1 &
 ```
-
-### Вариант 3: Cron (минимальный)
-
-Если не нужен постоянно работающий процесс:
-
-```bash
-# Добавить в crontab -e
-* * * * * cd /path/to/gh-notify && node src/index.js
-```
-
-> ⚠️ Этот вариант не поддерживает команды бота — только отправку уведомлений.
 
 ---
 
@@ -347,7 +338,7 @@ npx tsx --test src/formatter.test.ts
 npx tsx --test src/store.test.ts
 ```
 
-Текущее покрытие: **79 тестов** — `github.ts`, `formatter.ts`, `store.ts`.
+Текущее покрытие: **77 тестов** — `github.ts`, `formatter.ts`, `store.ts`.
 
 ---
 
