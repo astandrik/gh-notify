@@ -1,0 +1,161 @@
+import config from "./config.js";
+import { load, save } from "./store.js";
+import { createBot } from "./bot.js";
+import { fetchNotifications, markAsRead, buildHtmlUrl } from "./github.js";
+import { formatNotification, escapeHtml } from "./formatter.js";
+
+async function main(): Promise<void> {
+  const state = await load({
+    ghToken: config.ghToken,
+    chatId: config.chatId,
+  });
+
+  const bot = createBot(config.tgBotToken, state);
+
+  let pollPromise: Promise<void> | null = null;
+  let shuttingDown = false;
+  let lastErrorMessage: string | null = null;
+
+  async function pollNotifications(): Promise<void> {
+    if (shuttingDown) return;
+    if (pollPromise) return;
+    if (!state.enabled || !state.githubToken || !state.chatId) return;
+
+    const run = async (): Promise<void> => {
+      const { notifications, lastModified } = await fetchNotifications(
+        state.githubToken!,
+        state.lastModified,
+      );
+
+      let newCount = 0;
+      let hadSendFailure = false;
+
+      for (const n of notifications) {
+        if (shuttingDown) break;
+        if (state.seenIds.includes(n.id)) continue;
+
+        if (!state.subscriptions.includes(n.reason)) {
+          // Mark non-subscribed notifications as seen to prevent accumulation
+          state.seenIds.push(n.id);
+          try {
+            await markAsRead(state.githubToken!, n.id);
+          } catch { /* best-effort */ }
+          continue;
+        }
+
+        const url = buildHtmlUrl(n);
+        const { text, parseMode } = formatNotification(n, url);
+
+        try {
+          await bot.api.sendMessage(state.chatId!, text, { parse_mode: parseMode });
+          newCount++;
+
+          try {
+            await markAsRead(state.githubToken!, n.id);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`[poll] Failed to mark ${n.id} as read:`, message);
+          }
+
+          state.seenIds.push(n.id);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`[poll] Failed to send message for ${n.id}:`, message);
+          hadSendFailure = true;
+        }
+      }
+
+      const MAX_SEEN = 500;
+      if (state.seenIds.length > MAX_SEEN) {
+        state.seenIds = state.seenIds.slice(-MAX_SEEN);
+      }
+
+      if (!hadSendFailure && !shuttingDown) {
+        state.lastModified = lastModified ?? state.lastModified;
+      }
+      await save(state);
+
+      if (newCount > 0) {
+        console.log(`[poll] Sent ${newCount} notification(s)`);
+      }
+    };
+
+    pollPromise = run()
+      .then(() => {
+        // Clear error state on successful poll
+        if (lastErrorMessage) {
+          lastErrorMessage = null;
+        }
+      })
+      .catch(async (err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[poll] Error:", message);
+
+        // Only notify Telegram once per unique error to avoid spam
+        if (state.chatId && message !== lastErrorMessage) {
+          lastErrorMessage = message;
+          try {
+            await bot.api.sendMessage(
+              state.chatId,
+              `⚠️ <b>gh-notify error</b>\n\n<code>${escapeHtml(message)}</code>\n\nPolling will retry on next cycle.`,
+              { parse_mode: "HTML" },
+            );
+          } catch {
+            // Can't send to Telegram — nothing more we can do
+          }
+        }
+      })
+      .then(() => { pollPromise = null; });
+
+    return pollPromise;
+  }
+
+  const intervalId = setInterval(pollNotifications, config.pollInterval);
+
+  pollNotifications();
+
+  let shutdownInProgress = false;
+
+  async function shutdown(signal: string): Promise<void> {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+    shuttingDown = true;
+
+    console.log(`\n[shutdown] Received ${signal}. Saving state and stopping...`);
+    clearInterval(intervalId);
+
+    try {
+      if (pollPromise) {
+        await pollPromise;
+      }
+      await save(state);
+      bot.stop();
+      process.exit(0);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[shutdown] Error:", message);
+      process.exit(1);
+    }
+  }
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+  console.log("[bot] Starting gh-notify...");
+  console.log(`[bot] Poll interval: ${config.pollInterval}ms`);
+  console.log(`[bot] GitHub token: ${state.githubToken ? "configured" : "not set"}`);
+  console.log(`[bot] Chat ID: ${state.chatId || "not set (use /start)"}`);
+
+  await bot.start({
+    onStart: () => console.log("[bot] Telegram bot is running."),
+  }).catch(async (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[bot] Failed to start Telegram bot:", message);
+    await shutdown("BOT_ERROR");
+  });
+}
+
+main().catch((err: unknown) => {
+  console.error("[fatal]", err);
+  process.exit(1);
+});
