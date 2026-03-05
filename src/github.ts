@@ -92,9 +92,13 @@ export async function markAsRead(token: string, threadId: string): Promise<void>
 }
 
 export async function validateToken(token: string): Promise<TokenValidation> {
+  // Use a temporary Octokit instance to avoid polluting the cache with
+  // an unvalidated token. The cache is only updated on success.
+  const tempOctokit = new Octokit({ auth: token, userAgent: "gh-notify-telegram-bot" });
   try {
-    const octokit = getClient(token);
-    const { data } = await octokit.rest.users.getAuthenticated();
+    const { data } = await tempOctokit.rest.users.getAuthenticated();
+    // Validation succeeded — safe to cache this token now
+    cachedClient = { token, octokit: tempOctokit };
     return { valid: true, login: data.login };
   } catch {
     return { valid: false };

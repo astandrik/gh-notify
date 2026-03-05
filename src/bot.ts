@@ -102,8 +102,10 @@ export function createBot(token: string, state: AppState): Bot {
       await ctx.reply("🔒 Not authorized. Use /start in a private chat first.");
       return;
     }
+    state.enabled = true;
+    await save(state);
     await ctx.reply(
-      "Toggle event types to receive:",
+      "🔔 Notifications enabled. Toggle event types to receive:",
       { parse_mode: "HTML", reply_markup: buildSubscriptionKeyboard(state) },
     );
   });
@@ -179,8 +181,6 @@ export function createBot(token: string, state: AppState): Bot {
     } else {
       state.subscriptions.push(reason);
     }
-
-    state.enabled = state.subscriptions.length > 0;
 
     await save(state);
 

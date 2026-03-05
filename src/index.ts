@@ -32,7 +32,15 @@ async function main(): Promise<void> {
       for (const n of notifications) {
         if (shuttingDown) break;
         if (state.seenIds.includes(n.id)) continue;
-        if (!state.subscriptions.includes(n.reason)) continue;
+
+        if (!state.subscriptions.includes(n.reason)) {
+          // Mark non-subscribed notifications as seen to prevent accumulation
+          state.seenIds.push(n.id);
+          try {
+            await markAsRead(state.githubToken!, n.id);
+          } catch { /* best-effort */ }
+          continue;
+        }
 
         const url = buildHtmlUrl(n);
         const { text, parseMode } = formatNotification(n, url);
