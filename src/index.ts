@@ -2,7 +2,7 @@ import config from "./config.js";
 import { load, save } from "./store.js";
 import { createBot } from "./bot.js";
 import { fetchNotifications, markAsRead, buildHtmlUrl } from "./github.js";
-import { formatNotification } from "./formatter.js";
+import { formatNotification, escapeHtml } from "./formatter.js";
 
 async function main(): Promise<void> {
   const state = await load({
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
           try {
             await bot.api.sendMessage(
               state.chatId,
-              `⚠️ <b>gh-notify error</b>\n\n<code>${message}</code>\n\nPolling will retry on next cycle.`,
+              `⚠️ <b>gh-notify error</b>\n\n<code>${escapeHtml(message)}</code>\n\nPolling will retry on next cycle.`,
               { parse_mode: "HTML" },
             );
           } catch {

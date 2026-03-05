@@ -2,15 +2,22 @@ import { Octokit } from "@octokit/rest";
 import { RequestError } from "@octokit/request-error";
 import type { GitHubNotification, FetchResult, TokenValidation } from "./types.js";
 
-function createClient(token: string): Octokit {
-  return new Octokit({ auth: token, userAgent: "gh-notify-telegram-bot" });
+let cachedClient: { token: string; octokit: Octokit } | null = null;
+
+function getClient(token: string): Octokit {
+  if (cachedClient && cachedClient.token === token) {
+    return cachedClient.octokit;
+  }
+  const octokit = new Octokit({ auth: token, userAgent: "gh-notify-telegram-bot" });
+  cachedClient = { token, octokit };
+  return octokit;
 }
 
 export async function fetchNotifications(
   token: string,
   lastModified: string | null = null,
 ): Promise<FetchResult> {
-  const octokit = createClient(token);
+    const octokit = getClient(token);
 
   try {
     const response = await octokit.rest.activity.listNotificationsForAuthenticatedUser({
@@ -69,7 +76,7 @@ export async function fetchNotifications(
 }
 
 export async function markAsRead(token: string, threadId: string): Promise<void> {
-  const octokit = createClient(token);
+    const octokit = getClient(token);
 
   try {
     await octokit.rest.activity.markThreadAsRead({
@@ -86,7 +93,7 @@ export async function markAsRead(token: string, threadId: string): Promise<void>
 
 export async function validateToken(token: string): Promise<TokenValidation> {
   try {
-    const octokit = createClient(token);
+    const octokit = getClient(token);
     const { data } = await octokit.rest.users.getAuthenticated();
     return { valid: true, login: data.login };
   } catch {
