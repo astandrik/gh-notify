@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { JSONFilePreset } from "lowdb/node";
 import type { Low } from "lowdb";
 import type { AppState, EnvOverrides } from "./types.js";
@@ -33,7 +33,6 @@ async function getDb(): Promise<Low<AppState>> {
     } catch (error: unknown) {
       if (error instanceof SyntaxError) {
         console.warn("[store] Corrupted state.json detected. Resetting to defaults.");
-        const { writeFile } = await import("node:fs/promises");
         await writeFile(STATE_PATH, JSON.stringify(getDefault(), null, 2), "utf-8");
         db = await JSONFilePreset<AppState>(STATE_PATH, getDefault());
       } else {
@@ -74,7 +73,9 @@ export async function load(envOverrides: EnvOverrides = {}): Promise<AppState> {
   await instance.read();
 
   if (!isValidState(instance.data)) {
+    console.warn("[store] Invalid state.json structure. Resetting to defaults.");
     instance.data = getDefault();
+    await instance.write();
   }
 
   repair(instance.data);

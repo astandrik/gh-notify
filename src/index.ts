@@ -14,6 +14,7 @@ async function main(): Promise<void> {
 
   let pollPromise: Promise<void> | null = null;
   let shuttingDown = false;
+  let lastErrorMessage: string | null = null;
 
   async function pollNotifications(): Promise<void> {
     if (shuttingDown) return;
@@ -80,11 +81,19 @@ async function main(): Promise<void> {
     };
 
     pollPromise = run()
+      .then(() => {
+        // Clear error state on successful poll
+        if (lastErrorMessage) {
+          lastErrorMessage = null;
+        }
+      })
       .catch(async (err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
         console.error("[poll] Error:", message);
 
-        if (state.chatId) {
+        // Only notify Telegram once per unique error to avoid spam
+        if (state.chatId && message !== lastErrorMessage) {
+          lastErrorMessage = message;
           try {
             await bot.api.sendMessage(
               state.chatId,

@@ -59,7 +59,10 @@ export function createBot(token: string, state: AppState): Bot {
     }
 
     if (!isAuthorized(ctx)) {
-      await ctx.reply("🔒 Not authorized. Use /start in a private chat first.");
+      const warning = messageDeleted
+        ? ""
+        : "\n⚠️ Your message with the token could not be deleted. Please remove it manually.";
+      await ctx.reply(`🔒 Not authorized. Use /start in a private chat first.${warning}`);
       return;
     }
 
